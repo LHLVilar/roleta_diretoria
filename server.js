@@ -18,7 +18,6 @@ const dbClient = new Client({
 
 app.use(express.static(path.join(__dirname, "public")));
 
-// As listas agora são apenas para cache, o banco de dados é a fonte de verdade
 let morningList = [];
 let afternoonList = [];
 let morningDraw = [];
@@ -46,7 +45,6 @@ function shuffle(array) {
   return array;
 }
 
-// === CÓDIGO FINAL COM AS REGRAS DE TEMPO REATIVADAS ===
 function canAddOrRemoveName(period) {
   const now = new Date();
   const hour = now.getHours();
@@ -61,7 +59,6 @@ function canAddOrRemoveName(period) {
   return false;
 }
 
-// === FUNÇÃO PARA ATUALIZAR TODOS OS CLIENTES INDIVIDUALMENTE ===
 function updateListsForAllClients() {
   io.sockets.sockets.forEach(s => {
     s.emit("updateLists", {
