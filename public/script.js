@@ -4,7 +4,6 @@ const morningListEl = document.getElementById("morningList");
 const afternoonListEl = document.getElementById("afternoonList");
 const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
-const rulesEl = document.getElementById("rules");
 const errorBox = document.getElementById("errorBox");
 
 document.getElementById("btnAdicionar").addEventListener("click", () => {
@@ -14,33 +13,22 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
 
   const now = new Date();
   const hour = now.getHours();
-  const minute = now.getMinutes();
 
   let period = null;
-
   const morningStartHour = 5;
   const morningEndHour = 9;
-  const morningEndMinute = 44;
-  if ((hour >= morningStartHour && hour < morningEndHour) || (hour === morningEndHour && minute <= morningEndMinute)) {
-    period = "morning";
-  }
-
   const afternoonStartHour = 12;
   const afternoonEndHour = 14;
-  const afternoonEndMinute = 44;
-  if ((hour >= afternoonStartHour && hour < afternoonEndHour) || (hour === afternoonEndHour && minute <= afternoonEndMinute)) {
+
+  if (hour >= morningStartHour && hour <= morningEndHour) {
+    period = "morning";
+  } else if (hour >= afternoonStartHour && hour <= afternoonEndHour) {
     period = "afternoon";
   }
-
-  if (period) {
-    socket.emit("addName", { name, period });
-    nameInput.value = "";
-  } else {
-    errorBox.textContent = "Não é possível adicionar nomes fora dos horários permitidos.";
-    setTimeout(() => {
-      errorBox.textContent = "";
-    }, 5000);
-  }
+  
+  // Apenas envia o nome e o período, sem validação complexa
+  socket.emit("addName", { name, period });
+  nameInput.value = "";
 });
 
 socket.on("updateLists", (data) => {
@@ -48,7 +36,6 @@ socket.on("updateLists", (data) => {
   afternoonListEl.innerHTML = data.afternoonList.map((n) => `<li>${n.name} <span class="horario">${n.timestamp}</span></li>`).join("");
   morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
   afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
-  rulesEl.innerText = data.rules;
   errorBox.textContent = "";
 });
 
