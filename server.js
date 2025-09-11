@@ -46,8 +46,40 @@ function shuffle(array) {
   return array;
 }
 
+// A função de teste que desativa as regras de tempo
 function canAddOrRemoveName(period) {
+  // ATENÇÃO: Esta função está com a verificação de horário desativada
+  // para permitir testes. Para reativar as regras originais,
+  // remova esta linha e descomente o código abaixo.
   return true;
+
+  // const now = new Date();
+  // const hour = now.getHours();
+  // const minute = now.getMinutes();
+
+  // if (period === "morning") {
+  //   return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
+  // }
+  // if (period === "afternoon") {
+  //   return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
+  // }
+  // return false;
+}
+
+// === NOVA FUNÇÃO ===
+// Esta função envia a lista de nomes para CADA cliente
+// separadamente, informando o seu próprio ID de socket
+function updateListsForAllClients() {
+  io.sockets.sockets.forEach(s => {
+    s.emit("updateLists", {
+      morningList,
+      afternoonList,
+      morningDraw,
+      afternoonDraw,
+      rules,
+      myId: s.id
+    });
+  });
 }
 
 async function fetchListsFromDb() {
@@ -69,7 +101,7 @@ async function runDraw(period) {
   } else if (period === "afternoon" && afternoonList.length > 0) {
     afternoonDraw = shuffle([...afternoonList.map(n => n.name)]);
   }
-  io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules, myId: "" });
+  updateListsForAllClients(); // Agora usa a nova função
 }
 
 setInterval(async () => {
@@ -96,14 +128,14 @@ setInterval(async () => {
     afternoonList = [];
     morningDraw = [];
     afternoonDraw = [];
-    io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules, myId: "" });
+    updateListsForAllClients(); // Agora usa a nova função
   }
 }, 1000);
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
   await fetchListsFromDb();
-  io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules, myId: socket.id });
+  updateListsForAllClients(); // Agora usa a nova função
 
   socket.on("addName", async ({ name, period }) => {
     if (!canAddOrRemoveName(period)) {
@@ -130,7 +162,7 @@ io.on("connection", async (socket) => {
       );
       log(`Nome adicionado: ${newName} (${period})`);
       await fetchListsFromDb();
-      io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules, myId: socket.id });
+      updateListsForAllClients(); // Agora usa a nova função
     } catch (err) {
       log("Erro ao adicionar nome no banco de dados: " + err.message);
       socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
@@ -161,7 +193,7 @@ io.on("connection", async (socket) => {
       }
 
       await fetchListsFromDb();
-      io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules, myId: socket.id });
+      updateListsForAllClients(); // Agora usa a nova função
     } catch (err) {
       log("Erro ao remover nome do banco de dados: " + err.message);
       socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
@@ -208,4 +240,3 @@ async function runServer() {
 }
 
 runServer();
-
