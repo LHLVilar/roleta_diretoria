@@ -8,7 +8,7 @@ const rulesEl = document.getElementById("rules");
 const errorBox = document.getElementById("errorBox");
 
 document.getElementById("btnAdicionar").addEventListener("click", () => {
-  const nameInput = document.getElementById("nome"); // Adicionada esta linha
+  const nameInput = document.getElementById("nome");
   const name = nameInput.value.trim();
   if (!name) return;
 
@@ -34,7 +34,7 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
 
   if (period) {
     socket.emit("addName", { name, period });
-    nameInput.value = ""; // Adicionada esta linha para limpar o campo
+    nameInput.value = "";
   } else {
     errorBox.textContent = "Não é possível adicionar nomes fora dos horários permitidos.";
     setTimeout(() => {
