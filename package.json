@@ -1,14 +1,14 @@
 {
-  "name": "zsorteador",
+  "name": "roleta_diretoria",
   "version": "1.0.0",
-  "description": "Sistema de roleta de sorteio da diretoria",
+  "description": "",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "pg": "^8.11.3"
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "socket.io": "^4.7.5"
   }
 }
