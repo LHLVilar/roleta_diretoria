@@ -44,8 +44,8 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
 });
 
 socket.on("updateLists", (data) => {
-  morningListEl.innerHTML = data.morningList.map((n) => `<li>${n}</li>`).join("");
-  afternoonListEl.innerHTML = data.afternoonList.map((n) => `<li>${n}</li>`).join("");
+  morningListEl.innerHTML = data.morningList.map((n) => `<li>${n.name} <span class="horario">${n.timestamp}</span></li>`).join("");
+  afternoonListEl.innerHTML = data.afternoonList.map((n) => `<li>${n.name} <span class="horario">${n.timestamp}</span></li>`).join("");
   morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
   afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
   rulesEl.innerText = data.rules;
