@@ -11,7 +11,6 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
   const name = nameInput.value.trim();
   if (!name) return;
 
-  // === CÓDIGO FINAL COM AS REGRAS DE TEMPO REATIVADAS ===
   const now = new Date();
   const hour = now.getHours();
   const minute = now.getMinutes();
@@ -35,7 +34,6 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
   }
 });
 
-// Delegação de evento para os botões "X"
 document.getElementById("morningList").addEventListener("click", (e) => {
   if (e.target.classList.contains("btn-excluir")) {
     const name = e.target.getAttribute("data-nome");
