@@ -47,17 +47,7 @@ function shuffle(array) {
 }
 
 function canAddOrRemoveName(period) {
-  const now = new Date();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-
-  if (period === "morning") {
-    return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
-  }
-  if (period === "afternoon") {
-    return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
-  }
-  return false;
+  return true;
 }
 
 async function fetchListsFromDb() {
@@ -218,3 +208,4 @@ async function runServer() {
 }
 
 runServer();
+
