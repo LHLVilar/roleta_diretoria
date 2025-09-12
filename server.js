@@ -116,14 +116,14 @@ async function fetchListsFromDb() {
     morningList = morningResult.rows.map((row) => ({
       name: row.name,
       timestamp: row.timestamp,
-      socketId: row.socket_id
+      socketId: row.socket_id,
     }));
 
     const afternoonResult = await dbClient.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
     afternoonList = afternoonResult.rows.map((row) => ({
       name: row.name,
       timestamp: row.timestamp,
-      socketId: row.socket_id
+      socketId: row.socket_id,
     }));
 
     const morningDrawResult = await dbClient.query("SELECT * FROM morning_draw ORDER BY id ASC;");
@@ -166,6 +166,23 @@ async function runDraw(period) {
   updateListsForAllClients();
 }
 
+let morningCutApplied = false;
+let afternoonCut1Applied = false;
+let afternoonCut2Applied = false;
+
+async function applyCut(period, keptNames) {
+  const tableToUpdate = period === "morning" ? "morning_draw" : "afternoon_draw";
+  await dbClient.query(`UPDATE ${tableToUpdate} SET kept = false;`);
+
+  if (keptNames.length > 0) {
+    const placeholders = keptNames.map((_, i) => `$${i + 1}`).join(",");
+    await dbClient.query(`UPDATE ${tableToUpdate} SET kept = true WHERE name IN (${placeholders});`, keptNames);
+  }
+
+  await fetchListsFromDb();
+  updateListsForAllClients();
+}
+
 setInterval(async () => {
   const now = getSaoPauloTime();
   const hour = now.getHours();
@@ -181,7 +198,35 @@ setInterval(async () => {
     log("Sorteio automático da tarde.");
     await runDraw("afternoon");
   }
+
+  // Lógica do corte da manhã (12:05)
+  if (hour === 12 && minute === 5 && !morningCutApplied) {
+    morningCutApplied = true;
+    log("Aplicando corte automático da manhã.");
+    await dbClient.query("UPDATE morning_draw SET kept = false;");
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  }
+
+  // Lógica do primeiro corte da tarde (17:05)
+  if (hour === 17 && minute === 5 && !afternoonCut1Applied) {
+    afternoonCut1Applied = true;
+    log("Aplicando primeiro corte automático da tarde.");
+    await dbClient.query("UPDATE afternoon_draw SET kept = false;");
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  }
+
+  // Lógica do segundo corte da tarde (19:05)
+  if (hour === 19 && minute === 5 && !afternoonCut2Applied) {
+    afternoonCut2Applied = true;
+    log("Aplicando segundo corte automático da tarde.");
+    await dbClient.query("UPDATE afternoon_draw SET kept = false;");
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  }
   
+  // Limpeza à meia-noite
   if (hour === 0 && minute === 0 && second === 0) {
     log("Listas limpas no banco de dados.");
     await dbClient.query("DELETE FROM morning_list;");
@@ -192,6 +237,9 @@ setInterval(async () => {
     afternoonList = [];
     morningDraw = [];
     afternoonDraw = [];
+    morningCutApplied = false;
+    afternoonCut1Applied = false;
+    afternoonCut2Applied = false;
     updateListsForAllClients();
   }
 }, 1000);
@@ -212,7 +260,7 @@ io.on("connection", async (socket) => {
     const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit"
+      second: "2-digit",
     });
     let table = period === "morning" ? "morning_list" : "afternoon_list";
 
@@ -274,6 +322,7 @@ io.on("connection", async (socket) => {
     await runDraw(period);
   });
 
+  // Listener para atualização dos nomes que permanecem (mantido, mas não será usado pelo botão)
   socket.on("updateKeptNames", async (data) => {
     log(`Nomes a serem mantidos recebidos para o corte (${data.period})`);
     const tableToUpdate = data.period === "morning" ? "morning_draw" : "afternoon_draw";
