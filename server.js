@@ -45,8 +45,14 @@ function shuffle(array) {
   return array;
 }
 
+// === CÓDIGO FINAL COM O AJUSTE DE FUSO HORÁRIO ===
 function canAddOrRemoveName(period) {
-  const now = new Date();
+  // Ajusta a hora do servidor para o fuso horário de São Paulo (UTC-3)
+  const serverNow = new Date();
+  const utcOffset = serverNow.getTimezoneOffset() * 60000; // Offset em milissegundos
+  const saoPauloOffset = -3 * 60 * 60000; // Offset de São Paulo em milissegundos (-3h)
+  const now = new Date(serverNow.getTime() + utcOffset + saoPauloOffset);
+
   const hour = now.getHours();
   const minute = now.getMinutes();
 
