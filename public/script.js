@@ -4,8 +4,6 @@ const morningListEl = document.getElementById("morningList");
 const afternoonListEl = document.getElementById("afternoonList");
 const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
-const morningSubmitBtn = document.getElementById("morningSubmit");
-const afternoonSubmitBtn = document.getElementById("afternoonSubmit");
 const morningChecklistAction = document.getElementById("morningChecklistAction");
 const afternoonChecklistAction = document.getElementById("afternoonChecklistAction");
 const errorBox = document.getElementById("errorBox");
@@ -56,20 +54,6 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
   }
 });
 
-morningSubmitBtn.addEventListener("click", () => {
-  const keptNames = Array.from(morningDrawEl.querySelectorAll("input:checked")).map(
-    (input) => input.value
-  );
-  socket.emit("updateKeptNames", { period: "morning", keptNames });
-});
-
-afternoonSubmitBtn.addEventListener("click", () => {
-  const keptNames = Array.from(afternoonDrawEl.querySelectorAll("input:checked")).map(
-    (input) => input.value
-  );
-  socket.emit("updateKeptNames", { period: "afternoon", keptNames });
-});
-
 socket.on("updateLists", (data) => {
   morningListEl.innerHTML = data.morningList.map((n) => `
     <li class="list-group-item">
@@ -110,6 +94,22 @@ socket.on("updateLists", (data) => {
   afternoonChecklistAction.style.display = data.showAfternoonChecklist ? 'block' : 'none';
 
   errorBox.textContent = "";
+});
+
+// Listener para o clique no checklist da manhã
+morningDrawEl.addEventListener("change", (e) => {
+    if (e.target.type === "checkbox") {
+        const keptNames = Array.from(morningDrawEl.querySelectorAll("input:checked")).map((input) => input.value);
+        socket.emit("updateKeptNames", { period: "morning", keptNames });
+    }
+});
+
+// Listener para o clique no checklist da tarde
+afternoonDrawEl.addEventListener("change", (e) => {
+    if (e.target.type === "checkbox") {
+        const keptNames = Array.from(afternoonDrawEl.querySelectorAll("input:checked")).map((input) => input.value);
+        socket.emit("updateKeptNames", { period: "afternoon", keptNames });
+    }
 });
 
 socket.on("errorMessage", (message) => {
