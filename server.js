@@ -45,14 +45,16 @@ function shuffle(array) {
   return array;
 }
 
+function getSaoPauloTime() {
+  const serverNow = new Date();
+  const utcOffset = serverNow.getTimezoneOffset() * 60000;
+  const saoPauloOffset = -3 * 60 * 60000;
+  return new Date(serverNow.getTime() + utcOffset + saoPauloOffset);
+}
+
 // === CÓDIGO FINAL COM O AJUSTE DE FUSO HORÁRIO ===
 function canAddOrRemoveName(period) {
-  // Ajusta a hora do servidor para o fuso horário de São Paulo (UTC-3)
-  const serverNow = new Date();
-  const utcOffset = serverNow.getTimezoneOffset() * 60000; // Offset em milissegundos
-  const saoPauloOffset = -3 * 60 * 60000; // Offset de São Paulo em milissegundos (-3h)
-  const now = new Date(serverNow.getTime() + utcOffset + saoPauloOffset);
-
+  const now = getSaoPauloTime();
   const hour = now.getHours();
   const minute = now.getMinutes();
 
@@ -101,7 +103,7 @@ async function runDraw(period) {
 }
 
 setInterval(async () => {
-  const now = new Date();
+  const now = getSaoPauloTime();
   const hour = now.getHours();
   const minute = now.getMinutes();
   const second = now.getSeconds();
@@ -141,7 +143,8 @@ io.on("connection", async (socket) => {
     }
 
     const newName = name.trim();
-    const timestamp = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    // === AQUI ESTÁ A CORREÇÃO DO HORÁRIO ===
+    const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     let table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
