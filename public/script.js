@@ -81,7 +81,7 @@ socket.on("updateLists", (data) => {
   afternoonDrawEl.innerHTML = data.afternoonDraw.map((n) => `
       <li class="${!n.kept ? 'riscado' : ''}">
         ${data.showAfternoonChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
-        ${data.showCorujao ? 'Corujão' : ''}
+        ${data.showCorujao && n.kept ? 'Corujão ' : ''}
         ${n.name}
       </li>
     `).join("");
