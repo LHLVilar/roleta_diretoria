@@ -4,6 +4,10 @@ const morningListEl = document.getElementById("morningList");
 const afternoonListEl = document.getElementById("afternoonList");
 const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
+const morningSubmitBtn = document.getElementById("morningSubmit");
+const afternoonSubmitBtn = document.getElementById("afternoonSubmit");
+const morningChecklistAction = document.getElementById("morningChecklistAction");
+const afternoonChecklistAction = document.getElementById("afternoonChecklistAction");
 const errorBox = document.getElementById("errorBox");
 
 document.getElementById("btnAdicionar").addEventListener("click", () => {
@@ -52,6 +56,20 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
   }
 });
 
+morningSubmitBtn.addEventListener("click", () => {
+  const keptNames = Array.from(morningDrawEl.querySelectorAll("input:checked")).map(
+    (input) => input.value
+  );
+  socket.emit("updateKeptNames", { period: "morning", keptNames });
+});
+
+afternoonSubmitBtn.addEventListener("click", () => {
+  const keptNames = Array.from(afternoonDrawEl.querySelectorAll("input:checked")).map(
+    (input) => input.value
+  );
+  socket.emit("updateKeptNames", { period: "afternoon", keptNames });
+});
+
 socket.on("updateLists", (data) => {
   morningListEl.innerHTML = data.morningList.map((n) => `
     <li class="list-group-item">
@@ -69,8 +87,28 @@ socket.on("updateLists", (data) => {
     </li>
   `).join("");
 
-  morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
-  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
+  // Lógica para a lista de sorteio da manhã
+  morningDrawEl.innerHTML = data.morningDraw.map((n) => `
+    <li class="${!n.kept ? 'riscado' : ''}">
+      ${data.showMorningChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
+      ${n.name}
+    </li>
+  `).join("");
+  morningChecklistAction.style.display = data.showMorningChecklist ? 'block' : 'none';
+
+  // Lógica para a lista de sorteio da tarde
+  if (data.showCorujao) {
+    afternoonDrawEl.innerHTML = '<li>Corujão</li>';
+  } else {
+    afternoonDrawEl.innerHTML = data.afternoonDraw.map((n) => `
+      <li class="${!n.kept ? 'riscado' : ''}">
+        ${data.showAfternoonChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
+        ${n.name}
+      </li>
+    `).join("");
+  }
+  afternoonChecklistAction.style.display = data.showAfternoonChecklist ? 'block' : 'none';
+
   errorBox.textContent = "";
 });
 
