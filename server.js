@@ -52,7 +52,6 @@ function getSaoPauloTime() {
   return new Date(serverNow.getTime() + utcOffset + saoPauloOffset);
 }
 
-// === CÓDIGO FINAL COM O AJUSTE DE FUSO HORÁRIO ===
 function canAddOrRemoveName(period) {
   const now = getSaoPauloTime();
   const hour = now.getHours();
@@ -87,6 +86,13 @@ async function fetchListsFromDb() {
 
     const afternoonResult = await dbClient.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
     afternoonList = afternoonResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
+
+    const morningDrawResult = await dbClient.query("SELECT * FROM morning_draw ORDER BY id ASC;");
+    morningDraw = morningDrawResult.rows.map(row => row.name);
+
+    const afternoonDrawResult = await dbClient.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
+    afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
+
   } catch (err) {
     log("Erro ao buscar listas do banco de dados: " + err.message);
   }
@@ -94,11 +100,33 @@ async function fetchListsFromDb() {
 
 async function runDraw(period) {
   await fetchListsFromDb();
+  let listToDraw = [];
+  let tableToDraw = "";
+  let tableToClear = "";
+
   if (period === "morning" && morningList.length > 0) {
-    morningDraw = shuffle([...morningList.map(n => n.name)]);
+    listToDraw = morningList.map(n => n.name);
+    tableToDraw = "morning_draw";
+    tableToClear = "afternoon_draw"; // Para garantir que só haja um resultado por vez
   } else if (period === "afternoon" && afternoonList.length > 0) {
-    afternoonDraw = shuffle([...afternoonList.map(n => n.name)]);
+    listToDraw = afternoonList.map(n => n.name);
+    tableToDraw = "afternoon_draw";
+    tableToClear = "morning_draw"; // Para garantir que só haja um resultado por vez
+  } else {
+    return;
   }
+  
+  const shuffledList = shuffle([...listToDraw]);
+  
+  // Limpa o resultado anterior antes de inserir o novo
+  await dbClient.query(`DELETE FROM ${tableToDraw};`);
+  await dbClient.query(`DELETE FROM ${tableToClear};`);
+  
+  for (const name of shuffledList) {
+    await dbClient.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
+  }
+  
+  await fetchListsFromDb(); // Busca os novos resultados para a memória
   updateListsForAllClients();
 }
 
@@ -122,6 +150,8 @@ setInterval(async () => {
     log("Listas limpas no banco de dados.");
     await dbClient.query("DELETE FROM morning_list;");
     await dbClient.query("DELETE FROM afternoon_list;");
+    await dbClient.query("DELETE FROM morning_draw;");
+    await dbClient.query("DELETE FROM afternoon_draw;");
     morningList = [];
     afternoonList = [];
     morningDraw = [];
@@ -143,7 +173,6 @@ io.on("connection", async (socket) => {
     }
 
     const newName = name.trim();
-    // === AQUI ESTÁ A CORREÇÃO DO HORÁRIO ===
     const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     let table = period === "morning" ? "morning_list" : "afternoon_list";
 
@@ -223,6 +252,18 @@ async function runServer() {
         name VARCHAR(255) NOT NULL,
         timestamp VARCHAR(20),
         socket_id VARCHAR(255)
+      );
+    `);
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS morning_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+    `);
+    await dbClient.query(`
+      CREATE TABLE IF NOT EXISTS afternoon_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
       );
     `);
     log("Tabelas verificadas/criadas.");
