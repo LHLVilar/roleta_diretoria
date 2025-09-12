@@ -4,8 +4,6 @@ const morningListEl = document.getElementById("morningList");
 const afternoonListEl = document.getElementById("afternoonList");
 const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
-const morningChecklistAction = document.getElementById("morningChecklistAction");
-const afternoonChecklistAction = document.getElementById("afternoonChecklistAction");
 const errorBox = document.getElementById("errorBox");
 
 document.getElementById("btnAdicionar").addEventListener("click", () => {
@@ -78,20 +76,15 @@ socket.on("updateLists", (data) => {
       ${n.name}
     </li>
   `).join("");
-  morningChecklistAction.style.display = data.showMorningChecklist ? 'block' : 'none';
 
   // Lógica para a lista de sorteio da tarde
-  if (data.showCorujao) {
-    afternoonDrawEl.innerHTML = '<li>Corujão</li>';
-  } else {
-    afternoonDrawEl.innerHTML = data.afternoonDraw.map((n) => `
+  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n) => `
       <li class="${!n.kept ? 'riscado' : ''}">
         ${data.showAfternoonChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
+        ${data.showCorujao ? 'Corujão' : ''}
         ${n.name}
       </li>
     `).join("");
-  }
-  afternoonChecklistAction.style.display = data.showAfternoonChecklist ? 'block' : 'none';
 
   errorBox.textContent = "";
 });
