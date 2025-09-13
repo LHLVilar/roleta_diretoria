@@ -66,6 +66,33 @@ function canAddOrRemoveName(period) {
   return false;
 }
 
+function shouldShowChecklist(period) {
+  const now = getSaoPauloTime();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const time = hour * 60 + minute;
+
+  if (period === "morning") {
+    return time >= 11 * 60 + 55 && time <= 12 * 60 + 5;
+  }
+  if (period === "afternoon-1") {
+    return time >= 16 * 60 + 55 && time <= 17 * 60 + 5;
+  }
+  if (period === "afternoon-2") {
+    return time >= 18 * 60 + 55 && time <= 19 * 60 + 5;
+  }
+  return false;
+}
+
+function isAfterSecondCut() {
+  const now = getSaoPauloTime();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const time = hour * 60 + minute;
+
+  return time > 19 * 60 + 5;
+}
+
 function updateListsForAllClients() {
   io.sockets.sockets.forEach(s => {
     s.emit("updateLists", {
@@ -74,7 +101,10 @@ function updateListsForAllClients() {
       morningDraw,
       afternoonDraw,
       rules,
-      myId: s.id
+      myId: s.id,
+      showMorningChecklist: shouldShowChecklist("morning"),
+      showAfternoonChecklist: shouldShowChecklist("afternoon-1") || shouldShowChecklist("afternoon-2"),
+      showCorujao: isAfterSecondCut()
     });
   });
 }
@@ -88,10 +118,10 @@ async function fetchListsFromDb() {
     afternoonList = afternoonResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
 
     const morningDrawResult = await dbClient.query("SELECT * FROM morning_draw ORDER BY id ASC;");
-    morningDraw = morningDrawResult.rows.map(row => row.name);
+    morningDraw = morningDrawResult.rows;
 
     const afternoonDrawResult = await dbClient.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
-    afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
+    afternoonDraw = afternoonDrawResult.rows;
 
   } catch (err) {
     log("Erro ao buscar listas do banco de dados: " + err.message);
@@ -123,8 +153,8 @@ async function runDraw(period) {
   await dbClient.query(`DELETE FROM ${tableToClear};`);
   
   for (const name of shuffledList) {
-    await dbClient.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
-  }
+    await dbClient.query(`INSERT INTO ${tableToDraw} (name, kept) VALUES ($1, true);`, [name]);
+}
   
   await fetchListsFromDb(); // Busca os novos resultados para a memória
   updateListsForAllClients();
@@ -136,6 +166,14 @@ setInterval(async () => {
   const minute = now.getMinutes();
   const second = now.getSeconds();
 
+  // Lógica para atualizar a UI no horário do corte
+  if ((hour === 12 && minute === 5 && second === 0) ||
+      (hour === 17 && minute === 5 && second === 0) ||
+      (hour === 19 && minute === 5 && second === 0)) {
+    log("Notificando clientes para remover checklist.");
+    updateListsForAllClients();
+  }
+  
   if (hour === 9 && minute === 45 && second === 0) {
     log("Sorteio automático da manhã.");
     await runDraw("morning");
@@ -232,6 +270,22 @@ io.on("connection", async (socket) => {
     log(`Sorteio manual solicitado (${period})`);
     await runDraw(period);
   });
+
+  socket.on("updateKeptNames", async (data) => {
+    log(`Nomes a serem mantidos recebidos para o corte (${data.period})`);
+    const tableToUpdate = data.period === "morning" ? "morning_draw" : "afternoon_draw";
+
+    await dbClient.query(`UPDATE ${tableToUpdate} SET kept = false;`);
+
+    if (data.keptNames.length > 0) {
+      const placeholders = data.keptNames.map((_, i) => `$${i + 1}`).join(",");
+      await dbClient.query(`UPDATE ${tableToUpdate} SET kept = true WHERE name IN (${placeholders});`, data.keptNames);
+    }
+
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  });
+});
 });
 
 async function runServer() {
@@ -263,7 +317,8 @@ async function runServer() {
     await dbClient.query(`
       CREATE TABLE IF NOT EXISTS afternoon_draw (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL
+        name VARCHAR(255) NOT NULL,
+        kept BOOLEAN DEFAULT true
       );
     `);
     log("Tabelas verificadas/criadas.");
@@ -280,5 +335,3 @@ async function runServer() {
 }
 
 runServer();
-
-
