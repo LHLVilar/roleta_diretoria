@@ -2,10 +2,17 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
+const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+
+// Conexão com banco (Render)
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -14,7 +21,6 @@ let afternoonList = [];
 let morningDraw = [];
 let afternoonDraw = [];
 
-// Regras de horários
 const rules = `
 Regras:
 - Manhã: adicionar nomes de 05:00 a 09:44:59. Sorteio às 09:45.
@@ -37,67 +43,238 @@ function shuffle(array) {
   return array;
 }
 
-function runDraw(period) {
-  if (period === "morning" && morningList.length > 0) {
-    morningDraw = shuffle([...morningList]);
-  } else if (period === "afternoon" && afternoonList.length > 0) {
-    afternoonDraw = shuffle([...afternoonList]);
-  }
-  io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules });
+function getSaoPauloTime() {
+  const serverNow = new Date();
+  const utcOffset = serverNow.getTimezoneOffset() * 60000;
+  const saoPauloOffset = -3 * 60 * 60000;
+  return new Date(serverNow.getTime() + utcOffset + saoPauloOffset);
 }
 
-setInterval(() => {
-  const now = new Date();
+function canAddOrRemoveName(period) {
+  const now = getSaoPauloTime();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+
+  if (period === "morning") {
+    return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
+  }
+  if (period === "afternoon") {
+    return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
+  }
+  return false;
+}
+
+function updateListsForAllClients() {
+  io.emit("updateLists", {
+    morningList,
+    afternoonList,
+    morningDraw,
+    afternoonDraw,
+    rules,
+  });
+}
+
+async function fetchListsFromDb() {
+  try {
+    const morningResult = await db.query("SELECT * FROM morning_list ORDER BY timestamp ASC;");
+    morningList = morningResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
+
+    const afternoonResult = await db.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
+    afternoonList = afternoonResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
+
+    const morningDrawResult = await db.query("SELECT * FROM morning_draw ORDER BY id ASC;");
+    morningDraw = morningDrawResult.rows.map(row => row.name);
+
+    const afternoonDrawResult = await db.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
+    afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
+
+  } catch (err) {
+    log("Erro ao buscar listas do banco de dados: " + err.message);
+  }
+}
+
+async function runDraw(period) {
+  await fetchListsFromDb();
+  let listToDraw = [];
+  let tableToDraw = "";
+
+  if (period === "morning" && morningList.length > 0) {
+    listToDraw = morningList.map(n => n.name);
+    tableToDraw = "morning_draw";
+  } else if (period === "afternoon" && afternoonList.length > 0) {
+    listToDraw = afternoonList.map(n => n.name);
+    tableToDraw = "afternoon_draw";
+  } else {
+    return;
+  }
+
+  const shuffledList = shuffle([...listToDraw]);
+  await db.query(`DELETE FROM ${tableToDraw};`);
+
+  for (const name of shuffledList) {
+    await db.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
+  }
+
+  await fetchListsFromDb();
+  updateListsForAllClients();
+}
+
+// Evita sorteio duplicado no mesmo dia
+const lastDrawDate = { morning: null, afternoon: null };
+
+setInterval(async () => {
+  const now = getSaoPauloTime();
   const hour = now.getHours();
   const minute = now.getMinutes();
   const second = now.getSeconds();
+  const todayKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
 
-  if (hour === 9 && minute === 45 && second === 0) {
+  if (hour === 9 && minute === 45 && lastDrawDate.morning !== todayKey) {
+    lastDrawDate.morning = todayKey;
     log("Sorteio automático da manhã.");
-    runDraw("morning");
+    await runDraw("morning");
   }
 
-  if (hour === 14 && minute === 45 && second === 0) {
+  if (hour === 14 && minute === 45 && lastDrawDate.afternoon !== todayKey) {
+    lastDrawDate.afternoon = todayKey;
     log("Sorteio automático da tarde.");
-    runDraw("afternoon");
+    await runDraw("afternoon");
   }
 
   if (hour === 0 && minute === 0 && second === 0) {
-    log("Listas limpas.");
+    log("Listas limpas no banco de dados.");
+    await db.query("DELETE FROM morning_list;");
+    await db.query("DELETE FROM afternoon_list;");
+    await db.query("DELETE FROM morning_draw;");
+    await db.query("DELETE FROM afternoon_draw;");
     morningList = [];
     afternoonList = [];
     morningDraw = [];
     afternoonDraw = [];
-    io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules });
+    updateListsForAllClients();
+    lastDrawDate.morning = null;
+    lastDrawDate.afternoon = null;
   }
 }, 1000);
 
-io.on("connection", (socket) => {
-  log("Novo usuário conectado.");
+io.on("connection", async (socket) => {
+  log(`Novo usuário conectado com ID: ${socket.id}`);
+  await fetchListsFromDb();
+  updateListsForAllClients();
 
-  socket.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules });
-
-  socket.on("addName", ({ name, period }) => {
-    if (period === "morning") {
-      if (!morningList.some((n) => n.name === name)) {
-        morningList.push({ name: name, timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) });
-      }
-    } else if (period === "afternoon") {
-      if (!afternoonList.some((n) => n.name === name)) {
-        afternoonList.push({ name: name, timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) });
-      }
+  socket.on("addName", async ({ name, period }) => {
+    if (!canAddOrRemoveName(period)) {
+      socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
+      log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
+      return;
     }
-    log(`Nome adicionado: ${name} (${period})`);
-    io.emit("updateLists", { morningList, afternoonList, morningDraw, afternoonDraw, rules });
+
+    const newName = name.trim();
+    const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    let table = period === "morning" ? "morning_list" : "afternoon_list";
+
+    try {
+      const insertResult = await db.query(
+        `INSERT INTO ${table} (name, timestamp, socket_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO NOTHING
+         RETURNING id;`,
+        [newName, timestamp, socket.id]
+      );
+
+      if (insertResult.rowCount === 0) {
+        log(`Tentativa de adicionar nome duplicado: ${newName}`);
+        socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
+        return;
+      }
+
+      log(`Nome adicionado: ${newName} (${period})`);
+      await fetchListsFromDb();
+      updateListsForAllClients();
+    } catch (err) {
+      log("Erro ao adicionar nome no banco de dados: " + err.message);
+      socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
+    }
   });
 
-  socket.on("manualDraw", (period) => {
+  socket.on("removeName", async ({ name, period }) => {
+    if (!canAddOrRemoveName(period)) {
+      socket.emit("errorMessage", `Não é possível remover nomes fora dos horários permitidos.`);
+      log(`Tentativa de remover fora do horário: ${name} (${period})`);
+      return;
+    }
+
+    const trimmedName = name.trim();
+    let table = period === "morning" ? "morning_list" : "afternoon_list";
+
+    try {
+      const result = await db.query(
+        `DELETE FROM ${table} WHERE name = $1 AND socket_id = $2 RETURNING *;`,
+        [trimmedName, socket.id]
+      );
+
+      if (result.rowCount > 0) {
+        log(`Nome removido: ${trimmedName} (${period})`);
+      } else {
+        log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
+        socket.emit("errorMessage", "Você só pode remover o seu próprio nome.");
+      }
+
+      await fetchListsFromDb();
+      updateListsForAllClients();
+    } catch (err) {
+      log("Erro ao remover nome do banco de dados: " + err.message);
+      socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
+    }
+  });
+
+  socket.on("manualDraw", async (period) => {
     log(`Sorteio manual solicitado (${period})`);
-    runDraw(period);
+    await runDraw(period);
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  log(`Servidor rodando na porta ${PORT}`);
-});
+async function runServer() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS morning_list (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        timestamp VARCHAR(20),
+        socket_id VARCHAR(255)
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS afternoon_list (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        timestamp VARCHAR(20),
+        socket_id VARCHAR(255)
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS morning_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS afternoon_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+    `);
+    log("Tabelas verificadas/criadas.");
+
+    await fetchListsFromDb();
+
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      log(`Servidor rodando na porta ${PORT}`);
+    });
+  } catch (err) {
+    log("Falha na inicialização do servidor: " + err.message);
+  }
+}
+
+runServer();
