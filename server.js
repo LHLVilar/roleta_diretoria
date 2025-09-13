@@ -161,6 +161,7 @@ async function runDraw(period) {
 }
 
 setInterval(async () => {
+  log("Função setInterval rodando.");
   const now = getSaoPauloTime();
   const hour = now.getHours();
   const minute = now.getMinutes();
@@ -335,3 +336,4 @@ async function runServer() {
 }
 
 runServer();
+
