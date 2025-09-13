@@ -286,8 +286,6 @@ io.on("connection", async (socket) => {
     await fetchListsFromDb();
     updateListsForAllClients();
   });
-});
-});
 
 async function runServer() {
   try {
@@ -336,4 +334,5 @@ async function runServer() {
 }
 
 runServer();
+
 
