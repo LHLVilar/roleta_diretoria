@@ -34,6 +34,13 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
   }
 });
 
+// Permitir adicionar nome pressionando "Enter"
+document.getElementById("nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    document.getElementById("btnAdicionar").click();
+  }
+});
+
 document.getElementById("morningList").addEventListener("click", (e) => {
   if (e.target.classList.contains("btn-excluir")) {
     const name = e.target.getAttribute("data-nome");
