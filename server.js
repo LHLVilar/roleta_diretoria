@@ -120,8 +120,7 @@ async function runDraw(period) {
   
   // Limpa o resultado anterior antes de inserir o novo
   await dbClient.query(`DELETE FROM ${tableToDraw};`);
-  await dbClient.query(`DELETE FROM ${tableToClear};`);
-  
+   
   for (const name of shuffledList) {
     await dbClient.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
   }
@@ -280,4 +279,5 @@ async function runServer() {
 }
 
 runServer();
+
 
