@@ -2,18 +2,16 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
-const { Client } = require("pg");
+const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Configuração do banco de dados com a URL do Render
-const dbClient = new Client({
+// Conexão com banco (Render)
+const db = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: { rejectUnauthorized: false },
 });
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -67,30 +65,27 @@ function canAddOrRemoveName(period) {
 }
 
 function updateListsForAllClients() {
-  io.sockets.sockets.forEach(s => {
-    s.emit("updateLists", {
-      morningList,
-      afternoonList,
-      morningDraw,
-      afternoonDraw,
-      rules,
-      myId: s.id
-    });
+  io.emit("updateLists", {
+    morningList,
+    afternoonList,
+    morningDraw,
+    afternoonDraw,
+    rules,
   });
 }
 
 async function fetchListsFromDb() {
   try {
-    const morningResult = await dbClient.query("SELECT * FROM morning_list ORDER BY timestamp ASC;");
+    const morningResult = await db.query("SELECT * FROM morning_list ORDER BY timestamp ASC;");
     morningList = morningResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
 
-    const afternoonResult = await dbClient.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
+    const afternoonResult = await db.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
     afternoonList = afternoonResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
 
-    const morningDrawResult = await dbClient.query("SELECT * FROM morning_draw ORDER BY id ASC;");
+    const morningDrawResult = await db.query("SELECT * FROM morning_draw ORDER BY id ASC;");
     morningDraw = morningDrawResult.rows.map(row => row.name);
 
-    const afternoonDrawResult = await dbClient.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
+    const afternoonDrawResult = await db.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
     afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
 
   } catch (err) {
@@ -102,60 +97,63 @@ async function runDraw(period) {
   await fetchListsFromDb();
   let listToDraw = [];
   let tableToDraw = "";
-  let tableToClear = "";
 
   if (period === "morning" && morningList.length > 0) {
     listToDraw = morningList.map(n => n.name);
     tableToDraw = "morning_draw";
-    tableToClear = "afternoon_draw"; // Para garantir que só haja um resultado por vez
   } else if (period === "afternoon" && afternoonList.length > 0) {
     listToDraw = afternoonList.map(n => n.name);
     tableToDraw = "afternoon_draw";
-    tableToClear = "morning_draw"; // Para garantir que só haja um resultado por vez
   } else {
     return;
   }
-  
+
   const shuffledList = shuffle([...listToDraw]);
-  
-  // Limpa o resultado anterior antes de inserir o novo
-  await dbClient.query(`DELETE FROM ${tableToDraw};`);
-   
+  await db.query(`DELETE FROM ${tableToDraw};`);
+
   for (const name of shuffledList) {
-    await dbClient.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
+    await db.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
   }
-  
-  await fetchListsFromDb(); // Busca os novos resultados para a memória
+
+  await fetchListsFromDb();
   updateListsForAllClients();
 }
+
+// Evita sorteio duplicado no mesmo dia
+const lastDrawDate = { morning: null, afternoon: null };
 
 setInterval(async () => {
   const now = getSaoPauloTime();
   const hour = now.getHours();
   const minute = now.getMinutes();
   const second = now.getSeconds();
+  const todayKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
 
-  if (hour === 9 && minute === 45 && second === 0) {
+  if (hour === 9 && minute === 45 && lastDrawDate.morning !== todayKey) {
+    lastDrawDate.morning = todayKey;
     log("Sorteio automático da manhã.");
     await runDraw("morning");
   }
 
-  if (hour === 14 && minute === 45 && second === 0) {
+  if (hour === 14 && minute === 45 && lastDrawDate.afternoon !== todayKey) {
+    lastDrawDate.afternoon = todayKey;
     log("Sorteio automático da tarde.");
     await runDraw("afternoon");
   }
 
   if (hour === 0 && minute === 0 && second === 0) {
     log("Listas limpas no banco de dados.");
-    await dbClient.query("DELETE FROM morning_list;");
-    await dbClient.query("DELETE FROM afternoon_list;");
-    await dbClient.query("DELETE FROM morning_draw;");
-    await dbClient.query("DELETE FROM afternoon_draw;");
+    await db.query("DELETE FROM morning_list;");
+    await db.query("DELETE FROM afternoon_list;");
+    await db.query("DELETE FROM morning_draw;");
+    await db.query("DELETE FROM afternoon_draw;");
     morningList = [];
     afternoonList = [];
     morningDraw = [];
     afternoonDraw = [];
     updateListsForAllClients();
+    lastDrawDate.morning = null;
+    lastDrawDate.afternoon = null;
   }
 }, 1000);
 
@@ -176,17 +174,20 @@ io.on("connection", async (socket) => {
     let table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
-      const checkResult = await dbClient.query(`SELECT 1 FROM ${table} WHERE name = $1;`, [newName]);
-      if (checkResult.rowCount > 0) {
+      const insertResult = await db.query(
+        `INSERT INTO ${table} (name, timestamp, socket_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO NOTHING
+         RETURNING id;`,
+        [newName, timestamp, socket.id]
+      );
+
+      if (insertResult.rowCount === 0) {
         log(`Tentativa de adicionar nome duplicado: ${newName}`);
         socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
         return;
       }
-      
-      await dbClient.query(
-        `INSERT INTO ${table} (name, timestamp, socket_id) VALUES ($1, $2, $3);`,
-        [newName, timestamp, socket.id]
-      );
+
       log(`Nome adicionado: ${newName} (${period})`);
       await fetchListsFromDb();
       updateListsForAllClients();
@@ -207,15 +208,15 @@ io.on("connection", async (socket) => {
     let table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
-      const result = await dbClient.query(
+      const result = await db.query(
         `DELETE FROM ${table} WHERE name = $1 AND socket_id = $2 RETURNING *;`,
         [trimmedName, socket.id]
       );
-      
+
       if (result.rowCount > 0) {
         log(`Nome removido: ${trimmedName} (${period})`);
       } else {
-        log(`Tentativa de remover nome de outro usuário ou nome inexistente: ${trimmedName}`);
+        log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
         socket.emit("errorMessage", "Você só pode remover o seu próprio nome.");
       }
 
@@ -235,31 +236,29 @@ io.on("connection", async (socket) => {
 
 async function runServer() {
   try {
-    await dbClient.connect();
-    log("Conectado ao banco de dados.");
-    await dbClient.query(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS morning_list (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
+        name VARCHAR(255) UNIQUE NOT NULL,
         timestamp VARCHAR(20),
         socket_id VARCHAR(255)
       );
     `);
-    await dbClient.query(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS afternoon_list (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
+        name VARCHAR(255) UNIQUE NOT NULL,
         timestamp VARCHAR(20),
         socket_id VARCHAR(255)
       );
     `);
-    await dbClient.query(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS morning_draw (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL
       );
     `);
-    await dbClient.query(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS afternoon_draw (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL
@@ -279,5 +278,3 @@ async function runServer() {
 }
 
 runServer();
-
-
