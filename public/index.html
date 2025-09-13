@@ -56,48 +56,25 @@
       </div>
     </div>
     <div class="row mt-4">
-  <div class="col">
-    <div class="card bg-light text-dark">
-      <div class="card-body">
-        <h5 class="card-title">Resultado do Sorteio</h5>
-
-        <div id="cutChecklistSection" style="display: none;">
-          <h6 class="text-primary">Quem foi cortado?</h6>
-          <div class="row">
-            <div class="col">
-              <h6 id="morningCutHeading" style="display: none;">Corte 1 - Manhã</h6>
-              <ul id="morningCutList" class="list-unstyled"></ul>
-            </div>
-            <div class="col">
-              <h6 id="afternoonCutHeading" style="display: none;">Corte 2 - Tarde</h6>
-              <ul id="afternoonCutList" class="list-unstyled"></ul>
+      <div class="col">
+        <div class="card bg-light text-dark">
+          <div class="card-body">
+            <h5 class="card-title">Resultado do Sorteio</h5>
+            <div class="row">
+              <div class="col">
+                <h6 class="text-info">Manhã</h6>
+                <ul id="morningDraw" class="list-unstyled"></ul>
+              </div>
+              <div class="col">
+                <h6 class="text-info">Tarde</h6>
+                <ul id="afternoonDraw" class="list-unstyled"></ul>
+              </div>
             </div>
           </div>
         </div>
-
-        <div id="drawsSection">
-          <h6 class="text-info">Lista Sorteada</h6>
-          <div class="row">
-            <div class="col">
-              <h6 class="text-info">Manhã</h6>
-              <ul id="morningDraw" class="list-unstyled"></ul>
-            </div>
-            <div class="col">
-              <h6 class="text-info">Tarde</h6>
-              <ul id="afternoonDraw" class="list-unstyled"></ul>
-            </div>
-          </div>
-        </div>
-
-        <div id="corujaoSection" style="display: none;">
-          <h6 class="text-info">Corujão</h6>
-          <ul id="corujaoList" class="list-unstyled"></ul>
-        </div>
-
       </div>
     </div>
   </div>
-</div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/script.js"></script>
