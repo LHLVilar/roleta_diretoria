@@ -69,40 +69,9 @@ socket.on("updateLists", (data) => {
     </li>
   `).join("");
 
-  // Lógica para a lista de sorteio da manhã
-  morningDrawEl.innerHTML = data.morningDraw.map((n) => `
-    <li class="${!n.kept ? 'riscado' : ''}">
-      ${data.showMorningChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
-      ${n.name}
-    </li>
-  `).join("");
-
-  // Lógica para a lista de sorteio da tarde
-  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n) => `
-      <li class="${!n.kept ? 'riscado' : ''}">
-        ${data.showAfternoonChecklist ? `<input type="checkbox" value="${n.name}" ${n.kept ? 'checked' : ''}> ` : ''}
-        ${data.showCorujao && n.kept ? 'Corujão ' : ''}
-        ${n.name}
-      </li>
-    `).join("");
-
+  morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
+  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
   errorBox.textContent = "";
-});
-
-// Listener para o clique no checklist da manhã
-morningDrawEl.addEventListener("change", (e) => {
-    if (e.target.type === "checkbox") {
-        const keptNames = Array.from(morningDrawEl.querySelectorAll("input:checked")).map((input) => input.value);
-        socket.emit("updateKeptNames", { period: "morning", keptNames });
-    }
-});
-
-// Listener para o clique no checklist da tarde
-afternoonDrawEl.addEventListener("change", (e) => {
-    if (e.target.type === "checkbox") {
-        const keptNames = Array.from(afternoonDrawEl.querySelectorAll("input:checked")).map((input) => input.value);
-        socket.emit("updateKeptNames", { period: "afternoon", keptNames });
-    }
 });
 
 socket.on("errorMessage", (message) => {
