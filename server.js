@@ -88,7 +88,6 @@ async function fetchListsFromDb() {
 
     const afternoonDrawResult = await db.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
     afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
-
   } catch (err) {
     log("Erro ao buscar listas do banco de dados: " + err.message);
   }
@@ -129,7 +128,7 @@ setInterval(async () => {
   const hour = now.getHours();
   const minute = now.getMinutes();
   const second = now.getSeconds();
-  const todayKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
   if (hour === 9 && minute === 45 && lastDrawDate.morning !== todayKey) {
     lastDrawDate.morning = todayKey;
@@ -142,23 +141,8 @@ setInterval(async () => {
     log("Sorteio automático da tarde.");
     await runDraw("afternoon");
   }
-
-  if (hour === 0 && minute === 0 && second === 0) {
-    log("Listas limpas no banco de dados.");
-    await db.query("DELETE FROM morning_list;");
-    await db.query("DELETE FROM afternoon_list;");
-    await db.query("DELETE FROM morning_draw;");
-    await db.query("DELETE FROM afternoon_draw;");
-
-    morningList = [];
-    afternoonList = [];
-    morningDraw = [];
-    afternoonDraw = [];
-    updateListsForAllClients();
-
-    lastDrawDate.morning = null;
-    lastDrawDate.afternoon = null;
-  }
+  
+  // A lógica de limpeza de 00:00 foi movida para o cron job, pois ele é mais preciso.
 }, 1000);
 
 // ENDPOINT TEMPORÁRIO PARA LIMPAR O BANCO DE DADOS MANUALMENTE
@@ -205,21 +189,21 @@ io.on("connection", async (socket) => {
     try {
       const insertResult = await db.query(
         `INSERT INTO ${table} (name, timestamp, socket_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (name) DO NOTHING
-         RETURNING id;`,
+        VALUES ($1, $2, $3)
+        ON CONFLICT (name) DO NOTHING
+        RETURNING id;`,
         [newName, timestamp, socket.id]
       );
 
+      // Verifica se a inserção foi bem-sucedida (rowCount = 1) ou se houve conflito (rowCount = 0)
       if (insertResult.rowCount === 0) {
         log(`Tentativa de adicionar nome duplicado: ${newName}`);
         socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
-        return;
+      } else {
+        log(`Nome adicionado: ${newName} (${period})`);
+        await fetchListsFromDb();
+        updateListsForAllClients();
       }
-
-      log(`Nome adicionado: ${newName} (${period})`);
-      await fetchListsFromDb();
-      updateListsForAllClients();
     } catch (err) {
       log("Erro ao adicionar nome no banco de dados: " + err.message);
       socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
@@ -297,6 +281,7 @@ async function runServer() {
 
     await fetchListsFromDb();
 
+    // Cron job para limpar as listas à 00:00
     cron.schedule("0 0 * * *", async () => {
       log("Resetando listas às 00:00 BRT");
 
