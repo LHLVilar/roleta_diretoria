@@ -98,10 +98,10 @@ async function runDraw(period) {
   let listToDraw = [];
   let tableToDraw = "";
 
-  if (period === "morning" && morningList.length > 0) {
+  if (period === "morning") {
     listToDraw = morningList.map(n => n.name);
     tableToDraw = "morning_draw";
-  } else if (period === "afternoon" && afternoonList.length > 0) {
+  } else if (period === "afternoon") {
     listToDraw = afternoonList.map(n => n.name);
     tableToDraw = "afternoon_draw";
   } else {
@@ -283,3 +283,4 @@ async function runServer() {
 }
 
 runServer();
+
