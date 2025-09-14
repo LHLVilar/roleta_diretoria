@@ -122,25 +122,33 @@ async function runDraw(period) {
 // Evita sorteio duplicado no mesmo dia
 const lastDrawDate = { morning: null, afternoon: null };
 
-// Intervalo principal para sorteios automáticos
-setInterval(async () => {
+// Sorteio da manhã - 09:45
+cron.schedule("45 9 * * *", async () => {
   const now = getSaoPauloTime();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
   const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
-  if (hour === 9 && minute === 45 && lastDrawDate.morning !== todayKey) {
+  if (lastDrawDate.morning !== todayKey) {
     lastDrawDate.morning = todayKey;
     log("Sorteio automático da manhã.");
     await runDraw("morning");
   }
+}, {
+  timezone: "America/Sao_Paulo"
+});
 
-  if (hour === 14 && minute === 45 && lastDrawDate.afternoon !== todayKey) {
+// Sorteio da tarde - 14:45
+cron.schedule("45 14 * * *", async () => {
+  const now = getSaoPauloTime();
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+  if (lastDrawDate.afternoon !== todayKey) {
     lastDrawDate.afternoon = todayKey;
     log("Sorteio automático da tarde.");
     await runDraw("afternoon");
   }
-}, 1000);
+}, {
+  timezone: "America/Sao_Paulo"
+});
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
@@ -283,4 +291,5 @@ async function runServer() {
 }
 
 runServer();
+
 
