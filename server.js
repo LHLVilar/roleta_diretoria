@@ -17,21 +17,6 @@ const db = new Pool({
 
 app.use(express.static(path.join(__dirname, "public")));
 
-// NOVO ENDPOINT TEMPORÁRIO PARA EXCLUIR AS TABELAS
-app.get("/drop-tables", async (req, res) => {
-  try {
-    await db.query("DROP TABLE IF EXISTS morning_list;");
-    await db.query("DROP TABLE IF EXISTS afternoon_list;");
-    await db.query("DROP TABLE IF EXISTS morning_draw;");
-    await db.query("DROP TABLE IF EXISTS afternoon_draw;");
-    log("Tabelas excluídas com sucesso.");
-    res.send("Tabelas excluídas. Agora você pode apagar esta rota do código e fazer um novo deploy.");
-  } catch (err) {
-    log("Erro ao excluir tabelas: " + err.message);
-    res.status(500).send("Erro ao excluir tabelas. Tente novamente.");
-  }
-});
-
 let morningList = [];
 let afternoonList = [];
 let morningDraw = [];
@@ -54,7 +39,7 @@ function shuffle(array) {
   while (currentIndex !== 0) {
     randomIndex = Math.floor(Math.random() * currentIndex);
     currentIndex--;
-    [array[currentIndex], array[randomIndex]] = [array[currentIndex], array[randomIndex]];
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
   }
   return array;
 }
@@ -156,31 +141,6 @@ setInterval(async () => {
     await runDraw("afternoon");
   }
 }, 1000);
-
-// ENDPOINT TEMPORÁRIO PARA LIMPAR O BANCO DE DADOS MANUALMENTE
-app.get("/clear-all-lists", async (req, res) => {
-  try {
-    await db.query("DELETE FROM morning_list;");
-    await db.query("DELETE FROM afternoon_list;");
-    await db.query("DELETE FROM morning_draw;");
-    await db.query("DELETE FROM afternoon_draw;");
-
-    morningList = [];
-    afternoonList = [];
-    morningDraw = [];
-    afternoonDraw = [];
-
-    updateListsForAllClients();
-    lastDrawDate.morning = null;
-    lastDrawDate.afternoon = null;
-
-    log("Todas as listas foram apagadas com sucesso.");
-    res.send("Listas apagadas. Pode voltar para a página principal.");
-  } catch (err) {
-    log("Erro ao apagar listas: " + err.message);
-    res.status(500).send("Erro ao apagar as listas. Tente novamente.");
-  }
-});
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
