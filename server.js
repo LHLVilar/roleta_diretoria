@@ -1,9 +1,10 @@
+import cron from "node-cron";
+
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
 const { Pool } = require("pg");
-
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -268,6 +269,26 @@ async function runServer() {
 
     await fetchListsFromDb();
 
+  cron.schedule("0 0 * * *", async () => {
+    console.log("Resetando listas às 00:00 BRT");
+
+  await db.query("DELETE FROM morning_list;");
+  await db.query("DELETE FROM afternoon_list;");
+  await db.query("DELETE FROM morning_draw;");
+  await db.query("DELETE FROM afternoon_draw;");
+
+  morningList = [];
+  afternoonList = [];
+  morningDraw = [];
+  afternoonDraw = [];
+  updateListsForAllClients();
+
+  lastDrawDate.morning = null;
+  lastDrawDate.afternoon = null;
+  }, {
+      timezone: "America/Sao_Paulo"
+  });
+    
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
       log(`Servidor rodando na porta ${PORT}`);
@@ -278,3 +299,4 @@ async function runServer() {
 }
 
 runServer();
+
