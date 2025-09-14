@@ -1,4 +1,4 @@
-import cron from "node-cron";
+const cron = require("node-cron");
 
 const express = require("express");
 const http = require("http");
@@ -299,4 +299,5 @@ async function runServer() {
 }
 
 runServer();
+
 
