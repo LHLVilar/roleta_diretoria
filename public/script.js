@@ -6,6 +6,9 @@ const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
 const errorBox = document.getElementById("errorBox");
 
+// NOVO CÓDIGO: Variável para o botão de sorteio manual
+const manualDrawBtn = document.getElementById("manualDrawAfternoon");
+
 document.getElementById("btnAdicionar").addEventListener("click", () => {
   const nameInput = document.getElementById("nome");
   const name = nameInput.value.trim();
@@ -87,3 +90,10 @@ socket.on("errorMessage", (message) => {
       errorBox.textContent = "";
   }, 5000);
 });
+
+// NOVO CÓDIGO: Listener para o novo botão de sorteio manual
+if (manualDrawBtn) {
+  manualDrawBtn.addEventListener("click", () => {
+    socket.emit("manualDraw", "afternoon");
+  });
+}
