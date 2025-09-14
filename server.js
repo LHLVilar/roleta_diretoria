@@ -20,10 +20,18 @@ app.use(express.static(path.join(__dirname, "public")));
 // CÓDIGO TEMPORÁRIO PARA LIMPAR O BANCO DE DADOS
 app.get("/clear-all-lists", async (req, res) => {
   try {
-    await dbClient.query("DELETE FROM morning_list;");
-    await dbClient.query("DELETE FROM afternoon_list;");
-    await dbClient.query("DELETE FROM morning_draw;");
-    await dbClient.query("DELETE FROM afternoon_draw;");
+    await db.query("DELETE FROM morning_list;");
+    await db.query("DELETE FROM afternoon_list;");
+    await db.query("DELETE FROM morning_draw;");
+    await db.query("DELETE FROM afternoon_draw;");
+    
+    // limpar arrays em memória
+    morningList = [];
+    afternoonList = [];
+    morningDraw = [];
+    afternoonDraw = [];
+    updateListsForAllClients(); // atualiza todos os clientes conectados
+
     log("Todas as listas foram apagadas com sucesso.");
     res.send("Listas apagadas. Pode voltar para a página principal.");
   } catch (err) {
@@ -314,6 +322,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
