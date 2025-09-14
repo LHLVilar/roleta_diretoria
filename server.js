@@ -1,10 +1,10 @@
 const cron = require("node-cron");
-
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
 const { Pool } = require("pg");
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -123,6 +123,7 @@ async function runDraw(period) {
 // Evita sorteio duplicado no mesmo dia
 const lastDrawDate = { morning: null, afternoon: null };
 
+// Intervalo principal para sorteios automáticos e limpeza diária
 setInterval(async () => {
   const now = getSaoPauloTime();
   const hour = now.getHours();
@@ -148,15 +149,42 @@ setInterval(async () => {
     await db.query("DELETE FROM afternoon_list;");
     await db.query("DELETE FROM morning_draw;");
     await db.query("DELETE FROM afternoon_draw;");
+
     morningList = [];
     afternoonList = [];
     morningDraw = [];
     afternoonDraw = [];
     updateListsForAllClients();
+
     lastDrawDate.morning = null;
     lastDrawDate.afternoon = null;
   }
 }, 1000);
+
+// ENDPOINT TEMPORÁRIO PARA LIMPAR O BANCO DE DADOS MANUALMENTE
+app.get("/clear-all-lists", async (req, res) => {
+  try {
+    await db.query("DELETE FROM morning_list;");
+    await db.query("DELETE FROM afternoon_list;");
+    await db.query("DELETE FROM morning_draw;");
+    await db.query("DELETE FROM afternoon_draw;");
+
+    morningList = [];
+    afternoonList = [];
+    morningDraw = [];
+    afternoonDraw = [];
+
+    updateListsForAllClients();
+    lastDrawDate.morning = null;
+    lastDrawDate.afternoon = null;
+
+    log("Todas as listas foram apagadas com sucesso.");
+    res.send("Listas apagadas. Pode voltar para a página principal.");
+  } catch (err) {
+    log("Erro ao apagar listas: " + err.message);
+    res.status(500).send("Erro ao apagar as listas. Tente novamente.");
+  }
+});
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
@@ -172,7 +200,7 @@ io.on("connection", async (socket) => {
 
     const newName = name.trim();
     const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    let table = period === "morning" ? "morning_list" : "afternoon_list";
+    const table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
       const insertResult = await db.query(
@@ -206,101 +234,7 @@ io.on("connection", async (socket) => {
     }
 
     const trimmedName = name.trim();
-    let table = period === "morning" ? "morning_list" : "afternoon_list";
+    const table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
       const result = await db.query(
-        `DELETE FROM ${table} WHERE name = $1 AND socket_id = $2 RETURNING *;`,
-        [trimmedName, socket.id]
-      );
-
-      if (result.rowCount > 0) {
-        log(`Nome removido: ${trimmedName} (${period})`);
-      } else {
-        log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
-        socket.emit("errorMessage", "Você só pode remover o seu próprio nome.");
-      }
-
-      await fetchListsFromDb();
-      updateListsForAllClients();
-    } catch (err) {
-      log("Erro ao remover nome do banco de dados: " + err.message);
-      socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
-    }
-  });
-
-  socket.on("manualDraw", async (period) => {
-    log(`Sorteio manual solicitado (${period})`);
-    await runDraw(period);
-  });
-});
-
-async function runServer() {
-  try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS morning_list (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        timestamp VARCHAR(20),
-        socket_id VARCHAR(255)
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS afternoon_list (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        timestamp VARCHAR(20),
-        socket_id VARCHAR(255)
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS morning_draw (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS afternoon_draw (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL
-      );
-    `);
-    log("Tabelas verificadas/criadas.");
-
-    await fetchListsFromDb();
-
-  cron.schedule("0 0 * * *", async () => {
-    console.log("Resetando listas às 00:00 BRT");
-
-  await db.query("DELETE FROM morning_list;");
-  await db.query("DELETE FROM afternoon_list;");
-  await db.query("DELETE FROM morning_draw;");
-  await db.query("DELETE FROM afternoon_draw;");
-
-  morningList = [];
-  afternoonList = [];
-  morningDraw = [];
-  afternoonDraw = [];
-  updateListsForAllClients();
-
-  lastDrawDate.morning = null;
-  lastDrawDate.afternoon = null;
-  }, {
-      timezone: "America/Sao_Paulo"
-  });
-    
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      log(`Servidor rodando na porta ${PORT}`);
-    });
-  } catch (err) {
-    log("Falha na inicialização do servidor: " + err.message);
-  }
-}
-
-runServer();
-
-
-
-
-
