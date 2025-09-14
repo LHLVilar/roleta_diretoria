@@ -238,3 +238,92 @@ io.on("connection", async (socket) => {
 
     try {
       const result = await db.query(
+        `DELETE FROM ${table} WHERE name = $1 AND socket_id = $2 RETURNING *;`,
+        [trimmedName, socket.id]
+      );
+
+      if (result.rowCount > 0) {
+        log(`Nome removido: ${trimmedName} (${period})`);
+      } else {
+        log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
+        socket.emit("errorMessage", "Você só pode remover o seu próprio nome.");
+      }
+
+      await fetchListsFromDb();
+      updateListsForAllClients();
+    } catch (err) {
+      log("Erro ao remover nome do banco de dados: " + err.message);
+      socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
+    }
+  });
+
+  socket.on("manualDraw", async (period) => {
+    log(`Sorteio manual solicitado (${period})`);
+    await runDraw(period);
+  });
+});
+
+async function runServer() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS morning_list (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        timestamp VARCHAR(20),
+        socket_id VARCHAR(255)
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS afternoon_list (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        timestamp VARCHAR(20),
+        socket_id VARCHAR(255)
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS morning_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS afternoon_draw (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL
+      );
+    `);
+    log("Tabelas verificadas/criadas.");
+
+    await fetchListsFromDb();
+
+    cron.schedule("0 0 * * *", async () => {
+      log("Resetando listas às 00:00 BRT");
+
+      await db.query("DELETE FROM morning_list;");
+      await db.query("DELETE FROM afternoon_list;");
+      await db.query("DELETE FROM morning_draw;");
+      await db.query("DELETE FROM afternoon_draw;");
+
+      morningList = [];
+      afternoonList = [];
+      morningDraw = [];
+      afternoonDraw = [];
+      updateListsForAllClients();
+
+      lastDrawDate.morning = null;
+      lastDrawDate.afternoon = null;
+    }, {
+      timezone: "America/Sao_Paulo"
+    });
+
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      log(`Servidor rodando na porta ${PORT}`);
+    });
+  } catch (err) {
+    log("Falha na inicialização do servidor: " + err.message);
+  }
+}
+
+runServer();
