@@ -5,6 +5,18 @@ const afternoonListEl = document.getElementById("afternoonList");
 const morningDrawEl = document.getElementById("morningDraw");
 const afternoonDrawEl = document.getElementById("afternoonDraw");
 const errorBox = document.getElementById("errorBox");
+const relogioEl = document.getElementById("relogio");
+
+function atualizarRelogio() {
+  const agora = new Date();
+  const hora = agora.getHours().toString().padStart(2, '0');
+  const minuto = agora.getMinutes().toString().padStart(2, '0');
+  const segundo = agora.getSeconds().toString().padStart(2, '0');
+  relogioEl.textContent = `(${hora}:${minuto}:${segundo})`;
+}
+
+atualizarRelogio();
+setInterval(atualizarRelogio, 1000);
 
 document.getElementById("btnAdicionar").addEventListener("click", () => {
   const nameInput = document.getElementById("nome");
