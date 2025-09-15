@@ -36,6 +36,7 @@ body {
     background-color: #f0f0f0; /* Fundo cinza claro */
     padding: 5px 8px; /* Espaçamento interno */
     border-radius: 5px; /* Bordas arredondadas */
+    border: 2px solid #000;
 }
 
 /* Inputs e botões */
