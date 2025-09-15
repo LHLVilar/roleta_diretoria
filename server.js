@@ -261,7 +261,7 @@ async function runServer() {
     await fetchListsFromDb();
 
     // Cron job para limpar as listas à 00:00
-    cron.schedule("0 0 * * *", async () => {
+    cron.schedule("10 07 * * *", async () => {
       log("Resetando listas às 00:00 BRT");
 
       await db.query("DELETE FROM morning_list;");
@@ -291,5 +291,6 @@ async function runServer() {
 }
 
 runServer();
+
 
 
