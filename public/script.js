@@ -12,7 +12,7 @@ function atualizarRelogio() {
   const hora = agora.getHours().toString().padStart(2, '0');
   const minuto = agora.getMinutes().toString().padStart(2, '0');
   const segundo = agora.getSeconds().toString().padStart(2, '0');
-  relogioEl.textContent = `(${hora}:${minuto}:${segundo})`;
+  relogioEl.textContent = `${hora}:${minuto}:${segundo}`;
 }
 
 atualizarRelogio();
