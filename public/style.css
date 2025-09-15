@@ -27,6 +27,17 @@ body {
   color: #D50032;
 }
 
+/* Estilização do relógio
+#relogio {
+    color: #007bff; /* Cor do texto azul */
+    font-size: 1.2rem; /* Tamanho da fonte maior */
+    font-weight: bold; /* Deixa o texto em negrito */
+    margin-left: 10px; /* Adiciona um espaço à esquerda do relógio */
+    background-color: #f0f0f0; /* Fundo cinza claro */
+    padding: 5px 8px; /* Espaçamento interno */
+    border-radius: 5px; /* Bordas arredondadas */
+}
+
 /* Inputs e botões */
 .btn-primary {
   background-color: #D50032;
