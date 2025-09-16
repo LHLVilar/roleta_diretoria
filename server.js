@@ -260,6 +260,11 @@ async function runServer() {
 
     await fetchListsFromDb();
 
+    // Rota para manter o Render acordado
+app.get("/awake", (req, res) => {
+  res.send("Awake ativo");
+});
+
     // Cron job para limpar as listas à 00:00
     cron.schedule("13 0 * * *", async () => {
       log("Resetando listas às 00:00 BRT");
@@ -291,6 +296,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
