@@ -30,6 +30,10 @@ Regras:
 - Às 00:00 as listas são apagadas e o ciclo recomeça.
 `;
 
+let lastResetDate = null;
+
+async function resetIfNewDay
+
 function log(msg) {
   console.log(`[${new Date().toLocaleString()}] ${msg}`);
 }
@@ -93,6 +97,31 @@ async function fetchListsFromDb() {
   }
 }
 
+// Função para verificar e resetar as listas se for um novo dia
+async function checkAndResetDaily() {
+  try {
+    log("Resetando listas via checkAndResetDaily");
+
+    await db.query("DELETE FROM morning_list;");
+    await db.query("DELETE FROM afternoon_list;");
+    await db.query("DELETE FROM morning_draw;");
+    await db.query("DELETE FROM afternoon_draw;");
+
+    morningList = [];
+    afternoonList = [];
+    morningDraw = [];
+    afternoonDraw = [];
+    updateListsForAllClients();
+
+    lastDrawDate.morning = null;
+    lastDrawDate.afternoon = null;
+
+    log("Listas apagadas com sucesso.");
+  } catch (err) {
+    log("Erro ao limpar listas: " + err.message);
+  }
+}
+
 async function runDraw(period) {
   await fetchListsFromDb();
   let listToDraw = [];
@@ -152,6 +181,7 @@ cron.schedule("45 14 * * *", async () => {
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
+  await resetIfNewDay();
   await fetchListsFromDb();
   updateListsForAllClients();
 
@@ -256,35 +286,18 @@ async function runServer() {
         name VARCHAR(255) NOT NULL
       );
     `);
+
+     // NOVO: tabela para controlar último reset diário
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS daily_reset (
+        id SERIAL PRIMARY KEY,
+        last_reset DATE
+      );
+    `);
+    
     log("Tabelas verificadas/criadas.");
 
     await fetchListsFromDb();
-
-    // Rota para manter o Render acordado
-app.get("/awake", (req, res) => {
-  res.send("Awake ativo");
-});
-
-    // Cron job para limpar as listas à 00:00
-    cron.schedule("40 9 * * *", async () => {
-      log("Resetando listas às 00:00 BRT");
-
-      await db.query("DELETE FROM morning_list;");
-      await db.query("DELETE FROM afternoon_list;");
-      await db.query("DELETE FROM morning_draw;");
-      await db.query("DELETE FROM afternoon_draw;");
-
-      morningList = [];
-      afternoonList = [];
-      morningDraw = [];
-      afternoonDraw = [];
-      updateListsForAllClients();
-
-      lastDrawDate.morning = null;
-      lastDrawDate.afternoon = null;
-    }, {
-      timezone: "America/Sao_Paulo"
-    });
 
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
@@ -296,11 +309,3 @@ app.get("/awake", (req, res) => {
 }
 
 runServer();
-
-
-
-
-
-
-
-
