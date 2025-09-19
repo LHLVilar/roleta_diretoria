@@ -191,10 +191,8 @@ io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
   await resetIfNewDay();
   await fetchListsFromDb();
-    updateListsForAllClients();
-  });
-});
-
+  updateListsForAllClients();
+  
   socket.on("addName", async ({ name, period }) => {
     if (!canAddOrRemoveName(period)) {
       socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
@@ -319,4 +317,5 @@ async function runServer() {
 }
 
 runServer();
+
 
