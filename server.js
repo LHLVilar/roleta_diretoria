@@ -32,16 +32,6 @@ Regras:
 
 let lastResetDate = null;
 
-async function resetIfNewDay() {
-  const now = getSaoPauloTime();
-  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-
-  if (lastResetDate !== todayKey) {
-    lastResetDate = todayKey;
-    return checkAndResetDaily(); // retorna a promise, não usa await
-  }
-}
-
 function log(msg) {
   console.log(`[${new Date().toLocaleString()}] ${msg}`);
 }
@@ -107,27 +97,30 @@ async function fetchListsFromDb() {
 
 // Função para verificar e resetar as listas se for um novo dia
 async function checkAndResetDaily() {
-  try {
-    log("Resetando listas via checkAndResetDaily");
+    try {
+        const today = getSaoPauloTime().toISOString().split('T')[0];
+        const lastResetResult = await db.query("SELECT last_reset FROM daily_reset ORDER BY id DESC LIMIT 1;");
+        const lastResetDate = lastResetResult.rows.length > 0 ? lastResetResult.rows[0].last_reset.toISOString().split('T')[0] : null;
 
-    await db.query("DELETE FROM morning_list;");
-    await db.query("DELETE FROM afternoon_list;");
-    await db.query("DELETE FROM morning_draw;");
-    await db.query("DELETE FROM afternoon_draw;");
-
-    morningList = [];
-    afternoonList = [];
-    morningDraw = [];
-    afternoonDraw = [];
-    updateListsForAllClients();
-
-    lastDrawDate.morning = null;
-    lastDrawDate.afternoon = null;
-
-    log("Listas apagadas com sucesso.");
-  } catch (err) {
-    log("Erro ao limpar listas: " + err.message);
-  }
+        if (lastResetDate !== today) {
+            log("Detectado novo dia. Resetando listas.");
+            await db.query("DELETE FROM morning_list;");
+            await db.query("DELETE FROM afternoon_list;");
+            await db.query("DELETE FROM morning_draw;");
+            await db.query("DELETE FROM afternoon_draw;");
+            
+            await db.query("INSERT INTO daily_reset (last_reset) VALUES ($1);", [today]);
+            
+            morningList = [];
+            afternoonList = [];
+            morningDraw = [];
+            afternoonDraw = [];
+            
+            sendGeneralUpdateToAll();
+        }
+    } catch (err) {
+        log("Erro ao verificar e resetar listas: " + err.message);
+    }
 }
 
 async function runDraw(period) {
@@ -294,7 +287,12 @@ async function runServer() {
         name VARCHAR(255) NOT NULL
       );
     `);
-
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS daily_reset (
+        id SERIAL PRIMARY KEY,
+        last_reset DATE
+      );
+    `);
      // NOVO: tabela para controlar último reset diário
     await db.query(`
       CREATE TABLE IF NOT EXISTS daily_reset (
@@ -317,5 +315,6 @@ async function runServer() {
 }
 
 runServer();
+
 
 
