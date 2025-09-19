@@ -32,7 +32,15 @@ Regras:
 
 let lastResetDate = null;
 
-async function resetIfNewDay
+async function resetIfNewDay() {
+  const now = getSaoPauloTime();
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+  if (lastResetDate !== todayKey) {
+    lastResetDate = todayKey;
+    return checkAndResetDaily(); // retorna a promise, não usa await
+  }
+}
 
 function log(msg) {
   console.log(`[${new Date().toLocaleString()}] ${msg}`);
@@ -183,7 +191,9 @@ io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
   await resetIfNewDay();
   await fetchListsFromDb();
-  updateListsForAllClients();
+    updateListsForAllClients();
+  });
+});
 
   socket.on("addName", async ({ name, period }) => {
     if (!canAddOrRemoveName(period)) {
@@ -309,3 +319,4 @@ async function runServer() {
 }
 
 runServer();
+
