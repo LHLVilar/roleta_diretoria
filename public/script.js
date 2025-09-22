@@ -1,4 +1,4 @@
-const socket = io("https://roleta-diretoria-zanetti.up.railway.app");
+const socket = io("https://roleta-diretoria-2.onrender.com/");
 
 const morningListEl = document.getElementById("morningList");
 const afternoonListEl = document.getElementById("afternoonList");
