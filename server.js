@@ -62,7 +62,7 @@ function canAddOrRemoveName(period) {
     return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
   }
   if (period === "afternoon") {
-    return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
+    return (hour >= 12 && hour < 22) || (hour === 14 && minute <= 44);
   }
   return false;
 }
@@ -314,6 +314,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
