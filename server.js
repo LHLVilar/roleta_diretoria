@@ -59,7 +59,7 @@ function canAddOrRemoveName(period) {
   const minute = now.getMinutes();
 
   if (period === "morning") {
-    return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
+    return (hour >= 5 && hour < 9) || (hour === 11 && minute <= 44);
   }
   if (period === "afternoon") {
     return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
@@ -182,7 +182,6 @@ cron.schedule("45 14 * * *", async () => {
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
-  await resetIfNewDay();
   await fetchListsFromDb();
   updateListsForAllClients();
   
@@ -315,6 +314,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
