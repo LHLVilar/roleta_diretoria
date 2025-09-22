@@ -302,6 +302,7 @@ async function runServer() {
     
     log("Tabelas verificadas/criadas.");
 
+    await checkAndResetDaily();
     await fetchListsFromDb();
 
     const PORT = process.env.PORT || 3000;
@@ -314,6 +315,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
