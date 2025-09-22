@@ -27,14 +27,6 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
   const hour = now.getHours();
   const minute = now.getMinutes();
 
-  let period = null;
-
-  if ((hour >= 5 && hour < 9) || (hour === 9 && minute < 45)) {
-    period = "morning";
-  } else if ((hour >= 12 && hour < 14) || (hour === 14 && minute < 45)) {
-    period = "afternoon";
-  }
-
   if (period) {
     socket.emit("addName", { name, period });
     nameInput.value = "";
