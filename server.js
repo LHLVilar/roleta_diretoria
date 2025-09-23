@@ -141,9 +141,18 @@ async function runDraw(period) {
   const shuffledList = shuffle([...listToDraw]);
   await db.query(`DELETE FROM ${tableToDraw};`);
 
-  for (const name of shuffledList) {
-    await db.query(`INSERT INTO ${tableToDraw} (name) VALUES ($1);`, [name]);
-  }
+  // Insere os nomes sorteados com uma restrição para evitar duplicados.
+    // O ON CONFLICT é uma garantia extra, mas a restrição UNIQUE na tabela é a solução principal.
+    for (const name of shuffledList) {
+        try {
+            await db.query(
+                `INSERT INTO ${tableToDraw} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING;`,
+                [name]
+            );
+        } catch (err) {
+            log(`Erro ao inserir nome no sorteio: ${name} - ${err.message}`);
+        }
+    }
 
   await fetchListsFromDb();
   updateListsForAllClients();
@@ -364,4 +373,5 @@ async function runServer() {
 }
 
 runServer();
+
 
