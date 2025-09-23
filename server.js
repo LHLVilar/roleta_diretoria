@@ -256,6 +256,55 @@ io.on("connection", async (socket) => {
   });
 });
 
+// ---- INÍCIO DO CÓDIGO PARA MANTER O SERVIDOR ATIVO (NÃO MOVER) ----
+const keepAliveUrl = process.env.RENDER_EXTERNAL_URL;
+let keepAliveInterval = null;
+
+function startKeepAlive() {
+  if (keepAliveUrl && !keepAliveInterval) {
+    log("Iniciando ping para manter o servidor ativo.");
+    keepAliveInterval = setInterval(() => {
+      https.get(keepAliveUrl, (res) => {
+        log(`Ping para manter o servidor ativo. Status: ${res.statusCode}`);
+      }).on("error", (err) => {
+        log("Erro ao manter o servidor ativo: " + err.message);
+      });
+    }, 600000);
+  }
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    log("Parando ping para manter o servidor ativo.");
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+}
+
+cron.schedule("15 9 * * *", () => {
+    startKeepAlive();
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
+cron.schedule("15 14 * * *", () => {
+    startKeepAlive();
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
+cron.schedule("46 9 * * *", () => {
+    stopKeepAlive();
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
+cron.schedule("46 14 * * *", () => {
+    stopKeepAlive();
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
 async function runServer() {
   try {
     await db.query(`
@@ -315,16 +364,3 @@ async function runServer() {
 }
 
 runServer();
-
-
-
-
-
-
-
-
-
-
-
-
-
