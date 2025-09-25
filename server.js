@@ -176,7 +176,7 @@ cron.schedule("45 9 * * *", async () => {
 });
 
 // Sorteio da tarde - 14:45
-cron.schedule("45 14 * * *", async () => {
+cron.schedule("20 15 * * *", async () => {
   const now = getSaoPauloTime();
   const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
@@ -426,5 +426,6 @@ async function runServer() {
 }
 
 runServer();
+
 
 
