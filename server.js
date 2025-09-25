@@ -335,13 +335,13 @@ async function runServer() {
     await db.query(`
       CREATE TABLE IF NOT EXISTS morning_draw (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL
+        name VARCHAR(255) UNIQUE NOT NULL
       );
     `);
     await db.query(`
       CREATE TABLE IF NOT EXISTS afternoon_draw (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL
+        name VARCHAR(255) UNIQUE NOT NULL
       );
     `);
     await db.query(`
@@ -373,5 +373,6 @@ async function runServer() {
 }
 
 runServer();
+
 
 
