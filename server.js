@@ -162,7 +162,7 @@ async function runDraw(period) {
 const lastDrawDate = { morning: null, afternoon: null };
 
 // Sorteio da manhã - 09:45
-cron.schedule("45 9 * * *", async () => {
+cron.schedule("10 10 * * *", async () => {
   const now = getSaoPauloTime();
   const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
@@ -373,6 +373,7 @@ async function runServer() {
 }
 
 runServer();
+
 
 
 
