@@ -316,6 +316,64 @@ cron.schedule("46 14 * * *", () => {
 
 async function runServer() {
   try {
+    // ---- GARANTIA DE RESTRIÇÃO UNIQUE EM TODAS AS 4 TABELAS ----
+    // Isso é necessário para corrigir as tabelas que existiam antes da correção do código.
+    
+    // 1. morning_list (para evitar cadastro duplicado)
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'morning_list_name_key' AND contype = 'u'
+        ) THEN
+          ALTER TABLE morning_list ADD CONSTRAINT morning_list_name_key UNIQUE (name);
+        END IF;
+      END
+      $$;
+    `).catch(() => log("Tentativa de alterar morning_list ignorada (tabela pode não existir)."));
+
+    // 2. afternoon_list (para evitar cadastro duplicado)
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'afternoon_list_name_key' AND contype = 'u'
+        ) THEN
+          ALTER TABLE afternoon_list ADD CONSTRAINT afternoon_list_name_key UNIQUE (name);
+        END IF;
+      END
+      $$;
+    `).catch(() => log("Tentativa de alterar afternoon_list ignorada (tabela pode não existir)."));
+
+    // 3. morning_draw (para evitar duplicados no resultado)
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'morning_draw_name_key' AND contype = 'u'
+        ) THEN
+          ALTER TABLE morning_draw ADD CONSTRAINT morning_draw_name_key UNIQUE (name);
+        END IF;
+      END
+      $$;
+    `).catch(() => log("Tentativa de alterar morning_draw ignorada (tabela pode não existir)."));
+
+    // 4. afternoon_draw (para evitar duplicados no resultado)
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'afternoon_draw_name_key' AND contype = 'u'
+        ) THEN
+          ALTER TABLE afternoon_draw ADD CONSTRAINT afternoon_draw_name_key UNIQUE (name);
+        END IF;
+      END
+      $$;
+    `).catch(() => log("Tentativa de alterar afternoon_draw ignorada (tabela pode não existir)."));
+    // ------------------------------------------------------------------------------------
+
+
+    // Garante a criação de todas as tabelas (com UNIQUE)
     await db.query(`
       CREATE TABLE IF NOT EXISTS morning_list (
         id SERIAL PRIMARY KEY,
@@ -344,13 +402,7 @@ async function runServer() {
         name VARCHAR(255) UNIQUE NOT NULL
       );
     `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS daily_reset (
-        id SERIAL PRIMARY KEY,
-        last_reset DATE
-      );
-    `);
-     // NOVO: tabela para controlar último reset diário
+    // Corrigido: A tabela daily_reset estava duplicada. Mantive apenas uma criação.
     await db.query(`
       CREATE TABLE IF NOT EXISTS daily_reset (
         id SERIAL PRIMARY KEY,
@@ -360,6 +412,7 @@ async function runServer() {
     
     log("Tabelas verificadas/criadas.");
 
+    // Chamadas de funções que estavam no trecho que você me enviou:
     await checkAndResetDaily();
     await fetchListsFromDb();
 
@@ -373,7 +426,3 @@ async function runServer() {
 }
 
 runServer();
-
-
-
-
