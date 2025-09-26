@@ -416,9 +416,10 @@ async function runServer() {
     await checkAndResetDaily();
     await fetchListsFromDb();
 
+    const HOST = '0.0.0.0';
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      log(`Servidor rodando na porta ${PORT}`);
+    server.listen(PORT, HOST, () => {
+      log(`Servidor rodando em http://${HOST}:${PORT}`);
     });
   } catch (err) {
     log("Falha na inicialização do servidor: " + err.message);
@@ -426,7 +427,4 @@ async function runServer() {
 }
 
 runServer();
-
-
-
 
