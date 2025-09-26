@@ -144,15 +144,15 @@ async function runDraw(period) {
   // Insere os nomes sorteados com uma restrição para evitar duplicados.
     // O ON CONFLICT é uma garantia extra, mas a restrição UNIQUE na tabela é a solução principal.
     for (const name of shuffledList) {
-    try {
-        await db.query(
-            `INSERT INTO ${tableToDraw} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING;`,
-            [name]
-        );
-    } catch (err) {
-        log(`Erro ao inserir nome no sorteio: ${name} - ${err.message}`);
+        try {
+            await db.query(
+                `INSERT INTO ${tableToDraw} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING;`,
+                [name]
+            );
+        } catch (err) {
+            log(`Erro ao inserir nome no sorteio: ${name} - ${err.message}`);
+        }
     }
-}
 
   await fetchListsFromDb();
   updateListsForAllClients();
@@ -195,12 +195,10 @@ io.on("connection", async (socket) => {
   updateListsForAllClients();
   
   socket.on("addName", async ({ name, period }) => {
-    log(`Recebido addName: ${name}, period: ${period}, socket.id: ${socket.id}`);
-
     if (!canAddOrRemoveName(period)) {
-        socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
-        log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
-        return;
+      socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
+      log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
+      return;
     }
 
     const newName = name.trim();
@@ -208,31 +206,27 @@ io.on("connection", async (socket) => {
     const table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
-        const insertResult = await db.query(
-            `INSERT INTO ${table} (name, timestamp, socket_id)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (name) DO NOTHING
-             RETURNING id;`,
-            [newName, timestamp, socket.id]
-        );
+      const insertResult = await db.query(
+        `INSERT INTO ${table} (name, timestamp, socket_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (name) DO NOTHING
+        RETURNING id;`,
+        [newName, timestamp, socket.id]
+      );
 
-        log(`insertResult: ${JSON.stringify(insertResult.rows)}`);
-
-        if (insertResult.rowCount === 0) {
-            log(`Tentativa de adicionar nome duplicado: ${newName}`);
-            socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
-        } else {
-            log(`Nome adicionado: ${newName} (${period})`);
-            await fetchListsFromDb();
-            log(`morningList: ${JSON.stringify(morningList)}, afternoonList: ${JSON.stringify(afternoonList)}`);
-            updateListsForAllClients();
-        }
+      if (insertResult.rowCount === 0) {
+        log(`Tentativa de adicionar nome duplicado: ${newName}`);
+        socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
+      } else {
+        log(`Nome adicionado: ${newName} (${period})`);
+        await fetchListsFromDb();
+        updateListsForAllClients();
+      }
     } catch (err) {
-        log("Erro ao adicionar nome no banco de dados: " + err.message);
-        socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
+      log("Erro ao adicionar nome no banco de dados: " + err.message);
+      socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
     }
-});
-
+  });
 
   socket.on("removeName", async ({ name, period }) => {
     if (!canAddOrRemoveName(period)) {
@@ -422,10 +416,9 @@ async function runServer() {
     await checkAndResetDaily();
     await fetchListsFromDb();
 
-    const HOST = '0.0.0.0';
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, HOST, () => {
-      log(`Servidor rodando em http://${HOST}:${PORT}`);
+    server.listen(PORT, () => {
+      log(`Servidor rodando na porta ${PORT}`);
     });
   } catch (err) {
     log("Falha na inicialização do servidor: " + err.message);
@@ -433,5 +426,6 @@ async function runServer() {
 }
 
 runServer();
+
 
 
