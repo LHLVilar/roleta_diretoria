@@ -195,10 +195,12 @@ io.on("connection", async (socket) => {
   updateListsForAllClients();
   
   socket.on("addName", async ({ name, period }) => {
+    log(`Recebido addName: ${name}, period: ${period}, socket.id: ${socket.id}`);
+
     if (!canAddOrRemoveName(period)) {
-      socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
-      log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
-      return;
+        socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
+        log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
+        return;
     }
 
     const newName = name.trim();
@@ -206,27 +208,31 @@ io.on("connection", async (socket) => {
     const table = period === "morning" ? "morning_list" : "afternoon_list";
 
     try {
-      const insertResult = await db.query(
-        `INSERT INTO ${table} (name, timestamp, socket_id)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (name) DO NOTHING
-        RETURNING id;`,
-        [newName, timestamp, socket.id]
-      );
+        const insertResult = await db.query(
+            `INSERT INTO ${table} (name, timestamp, socket_id)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (name) DO NOTHING
+             RETURNING id;`,
+            [newName, timestamp, socket.id]
+        );
 
-      if (insertResult.rowCount === 0) {
-        log(`Tentativa de adicionar nome duplicado: ${newName}`);
-        socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
-      } else {
-        log(`Nome adicionado: ${newName} (${period})`);
-        await fetchListsFromDb();
-        updateListsForAllClients();
-      }
+        log(`insertResult: ${JSON.stringify(insertResult.rows)}`);
+
+        if (insertResult.rowCount === 0) {
+            log(`Tentativa de adicionar nome duplicado: ${newName}`);
+            socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
+        } else {
+            log(`Nome adicionado: ${newName} (${period})`);
+            await fetchListsFromDb();
+            log(`morningList: ${JSON.stringify(morningList)}, afternoonList: ${JSON.stringify(afternoonList)}`);
+            updateListsForAllClients();
+        }
     } catch (err) {
-      log("Erro ao adicionar nome no banco de dados: " + err.message);
-      socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
+        log("Erro ao adicionar nome no banco de dados: " + err.message);
+        socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
     }
-  });
+});
+
 
   socket.on("removeName", async ({ name, period }) => {
     if (!canAddOrRemoveName(period)) {
@@ -427,4 +433,5 @@ async function runServer() {
 }
 
 runServer();
+
 
