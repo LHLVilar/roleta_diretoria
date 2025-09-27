@@ -3,24 +3,43 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
-const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+// (Google Sheets) ---
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
 
-// Conexão com banco (Render)
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+// --- Configuração do Google Sheets ---
+const serviceAccountAuth = new JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Substitui '\n' se for lido de variável de ambiente
+    scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+    ],
 });
+// ID da sua planilha
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID; 
 
-app.use(express.static(path.join(__dirname, "public")));
+// Inicializa o objeto da planilha
+const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+
+// Função auxiliar para obter a aba pelo nome (Ex: 'morning_list')
+function getSheetByTitle(title) {
+    const sheet = doc.sheetsByTitle[title];
+    if (!sheet) {
+        throw new Error(`Aba "${title}" não encontrada na planilha.`);
+    }
+    return sheet;
+}
 
 let morningList = [];
 let afternoonList = [];
 let morningDraw = [];
 let afternoonDraw = [];
+
+const lastDrawDate = { morning: null, afternoon: null };
 
 const rules = `
 Regras:
@@ -76,91 +95,125 @@ function updateListsForAllClients() {
     rules,
   });
 }
-
+// ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS ----
 async function fetchListsFromDb() {
-  try {
-    const morningResult = await db.query("SELECT * FROM morning_list ORDER BY timestamp ASC;");
-    morningList = morningResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
+    try {
+        // As abas Morning List e Afternoon List devem ter as colunas: name, timestamp, socket_id
+        const morningSheet = getSheetByTitle('morning_list');
+        const afternoonSheet = getSheetByTitle('afternoon_list');
+        
+        // As abas Morning Draw e Afternoon Draw devem ter a coluna: name
+        const morningDrawSheet = getSheetByTitle('morning_draw');
+        const afternoonDrawSheet = getSheetByTitle('afternoon_draw');
 
-    const afternoonResult = await db.query("SELECT * FROM afternoon_list ORDER BY timestamp ASC;");
-    afternoonList = afternoonResult.rows.map(row => ({ name: row.name, timestamp: row.timestamp, socketId: row.socket_id }));
+        // Busca e mapeia a lista da manhã
+        const morningRows = await morningSheet.getRows();
+        morningList = morningRows.map(row => ({
+            name: row.get('name'),
+            timestamp: row.get('timestamp'),
+            socketId: row.get('socket_id') 
+        }));
 
-    const morningDrawResult = await db.query("SELECT * FROM morning_draw ORDER BY id ASC;");
-    morningDraw = morningDrawResult.rows.map(row => row.name);
+        // Busca e mapeia a lista da tarde
+        const afternoonRows = await afternoonSheet.getRows();
+        afternoonList = afternoonRows.map(row => ({
+            name: row.get('name'),
+            timestamp: row.get('timestamp'),
+            socketId: row.get('socket_id')
+        }));
 
-    const afternoonDrawResult = await db.query("SELECT * FROM afternoon_draw ORDER BY id ASC;");
-    afternoonDraw = afternoonDrawResult.rows.map(row => row.name);
-  } catch (err) {
-    log("Erro ao buscar listas do banco de dados: " + err.message);
-  }
+        // Busca e mapeia os resultados do sorteio da manhã
+        const morningDrawRows = await morningDrawSheet.getRows();
+        morningDraw = morningDrawRows.map(row => row.get('name'));
+
+        // Busca e mapeia os resultados do sorteio da tarde
+        const afternoonDrawRows = await afternoonDrawSheet.getRows();
+        afternoonDraw = afternoonDrawRows.map(row => row.get('name'));
+
+    } catch (err) {
+        log("Erro ao buscar listas do Google Sheets: " + err.message);
+    }
 }
 
 // Função para verificar e resetar as listas se for um novo dia
 async function checkAndResetDaily() {
     try {
         const today = getSaoPauloTime().toISOString().split('T')[0];
-        const lastResetResult = await db.query("SELECT last_reset FROM daily_reset ORDER BY id DESC LIMIT 1;");
-        const lastResetDate = lastResetResult.rows.length > 0 ? lastResetResult.rows[0].last_reset.toISOString().split('T')[0] : null;
+        
+        // 1. Acessa a aba de reset e busca a última data
+        const resetSheet = getSheetByTitle('daily_reset');
+        const resetRows = await resetSheet.getRows();
+        
+        const lastResetRow = resetRows[resetRows.length - 1];
+        const lastResetDate = lastResetRow ? lastResetRow.get('last_reset') : null;
 
         if (lastResetDate !== today) {
             log("Detectado novo dia. Resetando listas.");
-            await db.query("DELETE FROM morning_list;");
-            await db.query("DELETE FROM afternoon_list;");
-            await db.query("DELETE FROM morning_draw;");
-            await db.query("DELETE FROM afternoon_draw;");
             
-            await db.query("INSERT INTO daily_reset (last_reset) VALUES ($1);", [today]);
+            // 2. Apaga o conteúdo das abas (Deleta todas as linhas existentes)
+            const morningSheet = getSheetByTitle('morning_list');
+            const afternoonSheet = getSheetByTitle('afternoon_list');
+            const morningDrawSheet = getSheetByTitle('morning_draw');
+            const afternoonDrawSheet = getSheetByTitle('afternoon_draw');
+
+            // Deleta todas as linhas (rows)
+            await morningSheet.clearRows();
+            await afternoonSheet.clearRows();
+            await morningDrawSheet.clearRows();
+            await afternoonDrawSheet.clearRows();
+            
+            // 3. Insere o registro de novo reset (Substitui o INSERT INTO daily_reset)
+            if (lastResetRow) {
+                await lastResetRow.delete();
+            }
+            await resetSheet.addRow({ last_reset: today });
             
             morningList = [];
             afternoonList = [];
             morningDraw = [];
             afternoonDraw = [];
             
-            sendGeneralUpdateToAll();
+            updateListsForAllClients(); // Atualiza o frontend
         }
     } catch (err) {
-        log("Erro ao verificar e resetar listas: " + err.message);
+        log("Erro ao verificar e resetar listas no Sheets: " + err.message);
     }
 }
-
+// ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS ----
 async function runDraw(period) {
-  await fetchListsFromDb();
-  let listToDraw = [];
-  let tableToDraw = "";
+    await fetchListsFromDb();
+    let listToDraw = [];
+    let drawSheet = null;
 
-  if (period === "morning") {
-    listToDraw = morningList.map(n => n.name);
-    tableToDraw = "morning_draw";
-  } else if (period === "afternoon") {
-    listToDraw = afternoonList.map(n => n.name);
-    tableToDraw = "afternoon_draw";
-  } else {
-    return;
-  }
+    if (period === "morning") {
+        listToDraw = morningList.map(n => n.name);
+        drawSheet = getSheetByTitle("morning_draw");
+    } else if (period === "afternoon") {
+        listToDraw = afternoonList.map(n => n.name);
+        drawSheet = getSheetByTitle("afternoon_draw");
+    } else {
+        return;
+    }
 
-  const shuffledList = shuffle([...listToDraw]);
-  await db.query(`DELETE FROM ${tableToDraw};`);
+    const shuffledList = shuffle([...listToDraw]);
+    
+    // 1. Limpa o sorteio anterior (Substitui o DELETE do SQL)
+    await drawSheet.clearRows(); 
 
-  // Insere os nomes sorteados com uma restrição para evitar duplicados.
-    // O ON CONFLICT é uma garantia extra, mas a restrição UNIQUE na tabela é a solução principal.
+    // 2. Insere os nomes sorteados na aba de sorteio (Substitui o INSERT INTO)
+    // No Sheets, o ON CONFLICT não existe, mas como acabamos de limpar a aba, 
+    // a inserção será segura.
     for (const name of shuffledList) {
         try {
-            await db.query(
-                `INSERT INTO ${tableToDraw} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING;`,
-                [name]
-            );
+            await drawSheet.addRow({ name: name });
         } catch (err) {
-            log(`Erro ao inserir nome no sorteio: ${name} - ${err.message}`);
+            log(`Erro ao inserir nome no sorteio do Sheets: ${name} - ${err.message}`);
         }
     }
 
-  await fetchListsFromDb();
-  updateListsForAllClients();
+    await fetchListsFromDb();
+    updateListsForAllClients();
 }
-
-// Evita sorteio duplicado no mesmo dia
-const lastDrawDate = { morning: null, afternoon: null };
-
 // Sorteio da manhã - 09:45
 cron.schedule("45 9 * * *", async () => {
   const now = getSaoPauloTime();
@@ -193,239 +246,107 @@ io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
   await fetchListsFromDb();
   updateListsForAllClients();
-  
-  socket.on("addName", async ({ name, period }) => {
-    if (!canAddOrRemoveName(period)) {
-      socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
-      log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
-      return;
-    }
-
-    const newName = name.trim();
-    const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const table = period === "morning" ? "morning_list" : "afternoon_list";
-
-    try {
-      const insertResult = await db.query(
-        `INSERT INTO ${table} (name, timestamp, socket_id)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (name) DO NOTHING
-        RETURNING id;`,
-        [newName, timestamp, socket.id]
-      );
-
-      if (insertResult.rowCount === 0) {
-        log(`Tentativa de adicionar nome duplicado: ${newName}`);
-        socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
-      } else {
-        log(`Nome adicionado: ${newName} (${period})`);
-        await fetchListsFromDb();
-        updateListsForAllClients();
-      }
-    } catch (err) {
-      log("Erro ao adicionar nome no banco de dados: " + err.message);
-      socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
-    }
-  });
-
-  socket.on("removeName", async ({ name, period }) => {
-    if (!canAddOrRemoveName(period)) {
-      socket.emit("errorMessage", `Não é possível remover nomes fora dos horários permitidos.`);
-      log(`Tentativa de remover fora do horário: ${name} (${period})`);
-      return;
-    }
-
-    const trimmedName = name.trim();
-    const table = period === "morning" ? "morning_list" : "afternoon_list";
-
-    try {
-      const result = await db.query(
-        `DELETE FROM ${table} WHERE name = $1 AND socket_id = $2 RETURNING *;`,
-        [trimmedName, socket.id]
-      );
-
-      if (result.rowCount > 0) {
-        log(`Nome removido: ${trimmedName} (${period})`);
-      } else {
-        log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
-        socket.emit("errorMessage", "Você só pode remover o seu próprio nome.");
-      }
-
-      await fetchListsFromDb();
-      updateListsForAllClients();
-    } catch (err) {
-      log("Erro ao remover nome do banco de dados: " + err.message);
-      socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
-    }
-  });
-
-  socket.on("manualDraw", async (period) => {
-    log(`Sorteio manual solicitado (${period})`);
-    await runDraw(period);
-  });
-});
-
-// ---- INÍCIO DO CÓDIGO PARA MANTER O SERVIDOR ATIVO (NÃO MOVER) ----
-const keepAliveUrl = process.env.RENDER_EXTERNAL_URL;
-let keepAliveInterval = null;
-
-function startKeepAlive() {
-  if (keepAliveUrl && !keepAliveInterval) {
-    log("Iniciando ping para manter o servidor ativo.");
-    keepAliveInterval = setInterval(() => {
-      https.get(keepAliveUrl, (res) => {
-        log(`Ping para manter o servidor ativo. Status: ${res.statusCode}`);
-      }).on("error", (err) => {
-        log("Erro ao manter o servidor ativo: " + err.message);
-      });
-    }, 600000);
-  }
-}
-
-function stopKeepAlive() {
-  if (keepAliveInterval) {
-    log("Parando ping para manter o servidor ativo.");
-    clearInterval(keepAliveInterval);
-    keepAliveInterval = null;
-  }
-}
-
-cron.schedule("15 9 * * *", () => {
-    startKeepAlive();
-}, {
-    timezone: "America/Sao_Paulo"
-});
-
-cron.schedule("15 14 * * *", () => {
-    startKeepAlive();
-}, {
-    timezone: "America/Sao_Paulo"
-});
-
-cron.schedule("46 9 * * *", () => {
-    stopKeepAlive();
-}, {
-    timezone: "America/Sao_Paulo"
-});
-
-cron.schedule("46 14 * * *", () => {
-    stopKeepAlive();
-}, {
-    timezone: "America/Sao_Paulo"
-});
-
-async function runServer() {
-  try {
-    // ---- GARANTIA DE RESTRIÇÃO UNIQUE EM TODAS AS 4 TABELAS ----
-    // Isso é necessário para corrigir as tabelas que existiam antes da correção do código.
     
-    // 1. morning_list (para evitar cadastro duplicado)
-    await db.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'morning_list_name_key' AND contype = 'u'
-        ) THEN
-          ALTER TABLE morning_list ADD CONSTRAINT morning_list_name_key UNIQUE (name);
-        END IF;
-      END
-      $$;
-    `).catch(() => log("Tentativa de alterar morning_list ignorada (tabela pode não existir)."));
+    // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#7) ----
+    socket.on("addName", async ({ name, period }) => {
+        if (!canAddOrRemoveName(period)) {
+            socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
+            log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
+            return;
+        }
 
-    // 2. afternoon_list (para evitar cadastro duplicado)
-    await db.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'afternoon_list_name_key' AND contype = 'u'
-        ) THEN
-          ALTER TABLE afternoon_list ADD CONSTRAINT afternoon_list_name_key UNIQUE (name);
-        END IF;
-      END
-      $$;
-    `).catch(() => log("Tentativa de alterar afternoon_list ignorada (tabela pode não existir)."));
+        const newName = name.trim();
+        const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const sheetTitle = period === "morning" ? "morning_list" : "afternoon_list";
 
-    // 3. morning_draw (para evitar duplicados no resultado)
-    await db.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'morning_draw_name_key' AND contype = 'u'
-        ) THEN
-          ALTER TABLE morning_draw ADD CONSTRAINT morning_draw_name_key UNIQUE (name);
-        END IF;
-      END
-      $$;
-    `).catch(() => log("Tentativa de alterar morning_draw ignorada (tabela pode não existir)."));
+        try {
+            const sheet = getSheetByTitle(sheetTitle);
 
-    // 4. afternoon_draw (para evitar duplicados no resultado)
-    await db.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'afternoon_draw_name_key' AND contype = 'u'
-        ) THEN
-          ALTER TABLE afternoon_draw ADD CONSTRAINT afternoon_draw_name_key UNIQUE (name);
-        END IF;
-      END
-      $$;
-    `).catch(() => log("Tentativa de alterar afternoon_draw ignorada (tabela pode não existir)."));
-    // ------------------------------------------------------------------------------------
+            // 1. Verifica se o nome já existe no Sheets (Substitui o ON CONFLICT do SQL)
+            // É necessário carregar todas as linhas e verificar manualmente.
+            const rows = await sheet.getRows();
+            const isDuplicate = rows.some(row => row.get('name').toLowerCase() === newName.toLowerCase());
 
+            if (isDuplicate) {
+                log(`Tentativa de adicionar nome duplicado: ${newName}`);
+                socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
+            } else {
+                // 2. Insere o novo nome (Substitui o INSERT INTO)
+                await sheet.addRow({ name: newName, timestamp: timestamp, socket_id: socket.id });
 
-    // Garante a criação de todas as tabelas (com UNIQUE)
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS morning_list (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        timestamp VARCHAR(20),
-        socket_id VARCHAR(255)
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS afternoon_list (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        timestamp VARCHAR(20),
-        socket_id VARCHAR(255)
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS morning_draw (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL
-      );
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS afternoon_draw (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL
-      );
-    `);
-    // Corrigido: A tabela daily_reset estava duplicada. Mantive apenas uma criação.
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS daily_reset (
-        id SERIAL PRIMARY KEY,
-        last_reset DATE
-      );
-    `);
-    
-    log("Tabelas verificadas/criadas.");
-
-    // Chamadas de funções que estavam no trecho que você me enviou:
-    await checkAndResetDaily();
-    await fetchListsFromDb();
-
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      log(`Servidor rodando na porta ${PORT}`);
+                log(`Nome adicionado: ${newName} (${period})`);
+                await fetchListsFromDb();
+                updateListsForAllClients();
+            }
+        } catch (err) {
+            log("Erro ao adicionar nome no Sheets: " + err.message);
+            socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
+        }
     });
-  } catch (err) {
-    log("Falha na inicialização do servidor: " + err.message);
-  }
-}
+// ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#8) ----
+    socket.on("removeName", async ({ name, period }) => {
+        if (!canAddOrRemoveName(period)) {
+            socket.emit("errorMessage", `Não é possível remover nomes fora dos horários permitidos.`);
+            log(`Tentativa de remover fora do horário: ${name} (${period})`);
+            return;
+        }
 
+        const trimmedName = name.trim();
+        const sheetTitle = period === "morning" ? "morning_list" : "afternoon_list";
+
+        try {
+            const sheet = getSheetByTitle(sheetTitle);
+            const rows = await sheet.getRows();
+
+            // 1. Encontra a linha que corresponde ao nome E ao socket_id
+            const rowToDelete = rows.find(
+                row => row.get('name').toLowerCase() === trimmedName.toLowerCase() && row.get('socket_id') === socket.id
+            );
+
+            if (rowToDelete) {
+                // 2. Deleta a linha
+                await rowToDelete.delete();
+                log(`Nome removido: ${trimmedName} (${period})`);
+            } else {
+                log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
+                socket.emit("errorMessage", "Você só pode remover o seu próprio nome ou o nome não foi encontrado.");
+            }
+
+            await fetchListsFromDb();
+            updateListsForAllClients();
+        } catch (err) {
+            log("Erro ao remover nome do Sheets: " + err.message);
+            socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
+        }
+    });
+
+    socket.on("manualDraw", async (period) => {
+        log(`Sorteio manual solicitado (${period})`);
+        await runDraw(period);
+    });
+});
+
+  async function runServer() {
+    try {
+        // Carrega as informações da planilha (Substitui a criação/verificação de tabelas SQL)
+        await doc.loadInfo(); 
+        log("Conexão com Google Sheets estabelecida.");
+
+        // Chamadas de funções de inicialização:
+        await checkAndResetDaily();
+        await fetchListsFromDb();
+
+        const PORT = process.env.PORT || 3000;
+        server.listen(PORT, () => {
+            log(`Servidor rodando na porta ${PORT}`);
+        });
+    } catch (err) {
+        log("Falha na inicialização do servidor: " + err.message);
+        log("A falha pode ser na conexão inicial com o Google Sheets. Verifique suas credenciais.");
+    }
+}
 runServer();
+
 
 
 
