@@ -7,6 +7,15 @@ const path = require("path");
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+
+// Configura o Express para servir arquivos estáticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, "public")));
+
+// ⚠️ ADIÇÃO DA ROTA PRINCIPAL (/)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // (Google Sheets) ---
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
@@ -351,6 +360,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
 
 
