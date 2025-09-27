@@ -326,26 +326,33 @@ io.on("connection", async (socket) => {
     });
 });
 
-  async function runServer() {
+  // --- Definição da nova função de inicialização ---
+async function initializeSheets() {
     try {
-        // Carrega as informações da planilha (Substitui a criação/verificação de tabelas SQL)
         await doc.loadInfo(); 
         log("Conexão com Google Sheets estabelecida.");
 
         // Chamadas de funções de inicialização:
         await checkAndResetDaily();
         await fetchListsFromDb();
-
-        const PORT = process.env.PORT || 3000;
-        server.listen(PORT, '0.0.0.0', () => { 
-            log(`Servidor rodando na porta ${PORT}`);
-        });
     } catch (err) {
-        log("Falha na inicialização do servidor: " + err.message);
-        log("A falha pode ser na conexão inicial com o Google Sheets. Verifique suas credenciais.");
+        log("Falha na conexão inicial com o Google Sheets. O servidor está rodando, mas o DB está inacessível: " + err.message);
+        log("⚠️ VERIFIQUE SUAS VARIÁVEIS DE AMBIENTE: GOOGLE_PRIVATE_KEY e GOOGLE_SERVICE_ACCOUNT_EMAIL");
     }
 }
+
+// --------------------------------------------------
+// O `server.listen` deve estar aqui (na raiz do arquivo)!
+// --------------------------------------------------
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => { 
+    log(`Servidor rodando na porta ${PORT}`);
+
+    // Chamamos a função assíncrona AQUI.
+    initializeSheets();
+});
 runServer();
+
 
 
 
