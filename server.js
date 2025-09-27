@@ -351,7 +351,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
-runServer();
+
 
 
 
