@@ -337,7 +337,7 @@ io.on("connection", async (socket) => {
         await fetchListsFromDb();
 
         const PORT = process.env.PORT || 3000;
-        server.listen(PORT, () => {
+        server.listen(PORT, '0.0.0.0', () => { 
             log(`Servidor rodando na porta ${PORT}`);
         });
     } catch (err) {
@@ -346,6 +346,7 @@ io.on("connection", async (socket) => {
     }
 }
 runServer();
+
 
 
 
