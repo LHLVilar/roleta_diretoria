@@ -1,4 +1,4 @@
-import { io } from "socket.io-client";
+const { io } = require("socket.io-client");
 
 const URL = "https://roleta-diretoria-2.onrender.com/";
 
