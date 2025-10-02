@@ -7,6 +7,15 @@ const afternoonDrawEl = document.getElementById("afternoonDraw");
 const errorBox = document.getElementById("errorBox");
 const relogioEl = document.getElementById("relogio");
 
+// Variável para armazenar o ID do socket do cliente atual
+let mySocketId = null;
+
+// O servidor deve emitir seu ID após a conexão
+socket.on('connect', () => {
+    mySocketId = socket.id;
+    console.log("Conectado com ID:", mySocketId);
+});
+
 function atualizarRelogio() {
   const agora = new Date();
   const hora = agora.getHours().toString().padStart(2, '0');
@@ -72,21 +81,23 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
 });
 
 socket.on("updateLists", (data) => {
-  morningListEl.innerHTML = data.morningList.map((n) => `
+  // BLOCO DE RENDERIZAÇÃO DA LISTA DA MANHÃ
+morningListEl.innerHTML = data.morningList.map((n) => `
     <li class="list-group-item">
       <span>${n.name}</span>
       <span class="horario">${n.timestamp}</span>
-      ${n.socketId === data.myId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
+      ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
     </li>
-  `).join("");
+`).join("");
 
-  afternoonListEl.innerHTML = data.afternoonList.map((n) => `
+  // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
+afternoonListEl.innerHTML = data.afternoonList.map((n) => `
     <li class="list-group-item">
       <span>${n.name}</span>
       <span class="horario">${n.timestamp}</span>
-      ${n.socketId === data.myId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
+      ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
     </li>
-  `).join("");
+`).join("");
 
   morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
   afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
