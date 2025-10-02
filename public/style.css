@@ -60,11 +60,17 @@ body {
   padding: 10px;
   border-radius: 5px;
   margin-bottom: 10px;
+    /* Alinhamentopara o botão */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .list-group-item .horario {
   color: #B0B0B0;
   font-size: 0.875rem;
+  /* Empurra o horário para a direita para caber o botão */
+  margin-left: auto;
 }
 
 .list-group-item .btn-excluir {
@@ -73,6 +79,7 @@ body {
   border-radius: 50%;
   padding: 5px 10px;
   color: #FFFFFF;
+  flex-shrink: 0;
 }
 
 .list-group-item .btn-excluir:hover {
@@ -91,4 +98,6 @@ body {
   .col-md-6 {
     margin-bottom: 15px;
   }
+
+  
 }
