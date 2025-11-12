@@ -92,7 +92,7 @@ function canAddOrRemoveName(period) {
     return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
   }
   if (period === "afternoon") {
-    return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
+    return (hour >= 10 && hour < 14) || (hour === 14 && minute <= 44);
   }
   return false;
 }
@@ -239,7 +239,7 @@ async function startCheckPeriod() {
     }
     
     isCheckPeriodActive = true;
-    log("⏰ PERÍODO DE CHECAGEM INICIADO (19:00 - 19:30)");
+    log("⏰ PERÍODO DE CHECAGEM INICIADO (11:10 - 11:30)");
     updateListsForAllClients(); // Notifica clientes para mostrar a caixa de checagem
 }
 
@@ -265,7 +265,7 @@ async function endCheckPeriod() {
 async function checkName(socketId, name) {
     if (!isCheckPeriodActive) {
         // Envia mensagem de erro se a checagem for feita fora do horário
-        io.to(socketId).emit("errorMessage", "A caixa de checagem só pode ser marcada entre 19:00 e 19:30.");
+        io.to(socketId).emit("errorMessage", "A caixa de checagem só pode ser marcada entre 11:00 e 11:30.");
         return;
     }
     
@@ -298,7 +298,7 @@ cron.schedule("45 9 * * *", async () => {
 });
 
 // Sorteio da tarde - 14:45
-cron.schedule("45 14 * * *", async () => {
+cron.schedule("45 11 * * *", async () => {
   const now = getSaoPauloTime();
   const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
@@ -447,6 +447,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
 
 
