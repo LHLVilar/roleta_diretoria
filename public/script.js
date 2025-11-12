@@ -40,7 +40,7 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
 
   if ((hour >= 5 && hour < 9) || (hour === 9 && minute < 45)) {
     period = "morning";
-  } else if ((hour >= 10 && hour < 22) || (hour === 14 && minute < 45)) {
+  } else if ((hour >= 12 && hour < 22) || (hour === 14 && minute < 45)) {
     period = "afternoon";
   }
   
@@ -72,70 +72,36 @@ document.getElementById("morningList").addEventListener("click", (e) => {
 });
 
 document.getElementById("afternoonList").addEventListener("click", (e) => {
-    if (e.target.classList.contains("btn-excluir")) {
-        const name = e.target.getAttribute("data-nome");
-        if (confirm(`Tem certeza que deseja apagar o nome "${name}"?`)) {
-            socket.emit("removeName", { name, period: "afternoon" });
-        }
-    } 
-    // NOVO: Adiciona o listener para o botão de check (presença)
-    else if (e.target.classList.contains("btn-check")) {
-        const name = e.target.getAttribute("data-nome");
-        // Emite o evento para o servidor para marcar a presença
-        socket.emit("checkName", { name });
-        // O servidor processará e enviará a lista atualizada de volta.
+  if (e.target.classList.contains("btn-excluir")) {
+    const name = e.target.getAttribute("data-nome");
+    if (confirm(`Tem certeza que deseja apagar o nome "${name}"?`)) {
+      socket.emit("removeName", { name, period: "afternoon" });
     }
+  }
 });
 
-socket.on("updateLists", ({ morningList, afternoonList, morningDraw, afternoonDraw, rules, isCheckPeriodActive }) => {
-  // BLOCO DE RENDERIZAÇÃO DA LISTA DA MANHÃ (sem alteração)
-    morningListEl.innerHTML = morningList.map((n) => `
-        <li class="list-group-item">
-            <span>${n.name}</span>
-            <span class="horario">${n.timestamp}</span>
-            ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
-        </li>
-    `).join("");
+socket.on("updateLists", (data) => {
+  // BLOCO DE RENDERIZAÇÃO DA LISTA DA MANHÃ
+morningListEl.innerHTML = data.morningList.map((n) => `
+    <li class="list-group-item">
+      <span>${n.name}</span>
+      <span class="horario">${n.timestamp}</span>
+      ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
+    </li>
+`).join("");
 
-    // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE (AGORA COM LÓGICA DE CHECKBOX)
-    afternoonListEl.innerHTML = afternoonList.map((n) => {
-        // 1. O nome foi adicionado por este cliente?
-        const isMyName = n.socketId === mySocketId;
-        
-        // 2. O período de checagem está ativo E é meu nome E eu ainda não marquei?
-        const showCheck = isCheckPeriodActive && isMyName && !n.checked;
-        
-        // 3. O nome já está checado?
-        const isChecked = n.checked ? ' (PRESENTE)' : ''; 
+  // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
+afternoonListEl.innerHTML = data.afternoonList.map((n) => `
+    <li class="list-group-item">
+      <span>${n.name}</span>
+      <span class="horario">${n.timestamp}</span>
+      ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
+    </li>
+`).join("");
 
-        let controlsHtml = '';
-        
-        if (showCheck) {
-            // Se o período estiver ativo e for meu nome (e não checado), mostra o botão de checagem
-            controlsHtml = `<button class="btn btn-sm btn-success btn-check" data-nome="${n.name}">✓ PRESENÇA</button>`;
-        } else if (isMyName && !isCheckPeriodActive) {
-            // Se não estiver no período de checagem, mostra o botão de exclusão (se for meu nome)
-            controlsHtml = `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>`;
-        }
-        // Se o nome já foi marcado (n.checked = true), nenhum controle é mostrado, apenas o status (PRESENTE)
-
-        return `
-            <li class="list-group-item">
-                <span>${n.name}${isChecked}</span>
-                <span class="horario">${n.timestamp}</span>
-                ${controlsHtml}
-            </li>
-        `;
-    }).join("");
-
-    morningDrawEl.innerHTML = morningDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
-    afternoonDrawEl.innerHTML = afternoonDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
-    errorBox.textContent = "";
-
-    // 4. Salva as regras (necessário se você estiver usando rules)
-    if (rules) {
-        document.getElementById('rules').textContent = rules;
-    }
+  morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
+  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
+  errorBox.textContent = "";
 });
 
 socket.on("errorMessage", (message) => {
