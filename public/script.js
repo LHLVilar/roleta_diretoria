@@ -97,26 +97,20 @@ socket.on("updateLists", ({ morningList, afternoonList, morningDraw, afternoonDr
         </li>
     `).join("");
 
-    // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE (AGORA COM LÓGICA DE CHECKBOX)
+    // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE (LÓGICA DO CHECKLIST)
     afternoonListEl.innerHTML = afternoonList.map((n) => {
-        // 1. Condição para exibir o botão: O período de checagem está ativo E o nome ainda não foi marcado?
-        // REMOVEMOS: isMyName
+        // A lógica do checklist que permite QUALQUER UM marcar qualquer nome
         const showCheck = isCheckPeriodActive && !n.checked; 
-        
-        // 2. O nome já está checado?
         const isChecked = n.checked ? ' (PRESENTE)' : ''; 
 
         let controlsHtml = '';
         
         if (showCheck) {
-            // Se o período estiver ativo e não checado, mostra o botão de checagem para QUALQUER UM
             controlsHtml = `<button class="btn btn-sm btn-success btn-check" data-nome="${n.name}">✓ PRESENÇA</button>`;
         } else if (!isCheckPeriodActive) {
-            // Se não estiver no período de checagem, mostra o botão de exclusão
-            // Mantemos o botão X APENAS para quem adicionou o nome
+            // Se não estiver no período de checagem, mantém o botão X APENAS para quem adicionou o nome
             controlsHtml = n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : '';
         }
-        // Se o nome já foi marcado (n.checked = true), nenhum controle é mostrado, apenas o status (PRESENTE)
 
         return `
             <li class="list-group-item">
@@ -126,6 +120,12 @@ socket.on("updateLists", ({ morningList, afternoonList, morningDraw, afternoonDr
             </li>
         `;
     }).join("");
+
+	// 4. Salva as regras
+    	if (rules) {
+        document.getElementById('rules').textContent = rules;
+    }
+});
 
     morningDrawEl.innerHTML = morningDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
     afternoonDrawEl.innerHTML = afternoonDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
