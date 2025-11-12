@@ -47,8 +47,6 @@ let morningList = [];
 let afternoonList = [];
 let morningDraw = [];
 let afternoonDraw = [];
-// Variável para rastrear o estado do período de checagem
-let isCheckPeriodActive = false;
 
 const lastDrawDate = { morning: null, afternoon: null };
 
@@ -92,20 +90,19 @@ function canAddOrRemoveName(period) {
     return (hour >= 5 && hour < 9) || (hour === 9 && minute <= 44);
   }
   if (period === "afternoon") {
-    return (hour >= 10 && hour < 14) || (hour === 14 && minute <= 44);
+    return (hour >= 12 && hour < 14) || (hour === 14 && minute <= 44);
   }
   return false;
 }
 
 function updateListsForAllClients() {
-  io.emit("updateLists", {
-    morningList,
-    afternoonList,
-    morningDraw,
-    afternoonDraw,
-    rules,
-    isCheckPeriodActive, // ⬅️ NOVO: Inclui o estado de checagem
-  });
+  io.emit("updateLists", {
+    morningList,
+    afternoonList,
+    morningDraw,
+    afternoonDraw,
+    rules,
+  });
 }
 // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS ----
 async function fetchListsFromDb() {
@@ -126,14 +123,12 @@ async function fetchListsFromDb() {
             socketId: row.get('socket_id') 
         }));
 
-       // Busca e mapeia a lista da tarde
-	const afternoonRows = await afternoonSheet.getRows();
-	afternoonList = afternoonRows.map(row => ({
-	    name: row.get('name'),
-	    timestamp: row.get('timestamp'),
-	    socketId: row.get('socket_id'),
-    // NOVO: Lê o status de checagem (converte TRUE/FALSE para booleano)
-	    checked: row.get('checked') === 'TRUE'
+        // Busca e mapeia a lista da tarde
+        const afternoonRows = await afternoonSheet.getRows();
+        afternoonList = afternoonRows.map(row => ({
+            name: row.get('name'),
+            timestamp: row.get('timestamp'),
+            socketId: row.get('socket_id')
         }));
 
         // Busca e mapeia os resultados do sorteio da manhã
@@ -228,61 +223,6 @@ async function runDraw(period) {
     await fetchListsFromDb();
     updateListsForAllClients();
 }
-
-// Função para iniciar o período de checagem (19:00)
-async function startCheckPeriod() {
-    // ⚠️ Importante: Garante que a lista mais recente seja carregada antes de verificar.
-    await fetchListsFromDb(); 
-    if (!afternoonList || afternoonList.length === 0) {
-        log("Período de checagem ignorado: Lista da tarde vazia.");
-        return;
-    }
-    
-    isCheckPeriodActive = true;
-    log("⏰ PERÍODO DE CHECAGEM INICIADO (11:45 - 11:47)");
-    updateListsForAllClients(); // Notifica clientes para mostrar a caixa de checagem
-}
-
-// Função para encerrar o período de checagem e apagar nomes (19:31)
-async function endCheckPeriod() {
-    isCheckPeriodActive = false;
-    
-    const namesBefore = afternoonList.length;
-    
-    // Filtra a lista da tarde, mantendo apenas quem marcou checked = true
-    afternoonList = afternoonList.filter(n => n.checked === true);
-    
-    const namesAfter = afternoonList.length;
-
-    log(`❌ PERÍODO DE CHECAGEM ENCERRADO. Removidos ${namesBefore - namesAfter} nomes sem marcação.`);
-
-    // ⚠️ CRÍTICO: Sua função de salvar no Sheets (que reescreve a lista filtrada) precisa ser chamada aqui.
-    await saveListsToDb(); // ⬅️ CHAME SUA FUNÇÃO DE SALVAR/REESCREVER LISTAS AQUI!
-    updateListsForAllClients(); // Notifica clientes com a lista filtrada
-}
-
-// Função para processar a marcação do cliente
-async function checkName(socketId, name) {
-    if (!isCheckPeriodActive) {
-        // Envia mensagem de erro se a checagem for feita fora do horário
-        io.to(socketId).emit("errorMessage", "A caixa de checagem só pode ser marcada entre 11:00 e 11:30.");
-        return;
-    }
-    
-    // Encontra o nome adicionado por este socketId
-    const itemToUpdate = afternoonList.find(n => n.name.toLowerCase() === name.toLowerCase() && n.socketId === socketId);
-    
-    if (itemToUpdate && !itemToUpdate.checked) {
-        // 1. Atualiza a lista local
-        itemToUpdate.checked = true; 
-        
-        // 2. Atualiza no Sheets. Você precisa atualizar o status 'checked' na planilha.
-        await updateSheetRowStatus(itemToUpdate); // ⬅️ CHAME SUA FUNÇÃO DE ATUALIZAÇÃO AQUI!
-        
-        await fetchListsFromDb(); // Rebusca para garantir que todos tenham o status mais recente
-        updateListsForAllClients();
-    }
-}
 // Sorteio da manhã - 09:45
 cron.schedule("45 9 * * *", async () => {
   const now = getSaoPauloTime();
@@ -298,7 +238,7 @@ cron.schedule("45 9 * * *", async () => {
 });
 
 // Sorteio da tarde - 14:45
-cron.schedule("45 11 * * *", async () => {
+cron.schedule("45 14 * * *", async () => {
   const now = getSaoPauloTime();
   const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
@@ -309,22 +249,6 @@ cron.schedule("45 11 * * *", async () => {
   }
 }, {
   timezone: "America/Sao_Paulo"
-});
-
-// Agendamento da Abertura do Período de Checagem (19:00)
-cron.schedule("45 11 * * *", async () => {
-    log("Agendamento: Início do período de checagem da tarde.");
-    await startCheckPeriod();
-}, {
-    timezone: "America/Sao_Paulo" 
-});
-
-// Agendamento do Fim do Período de Checagem e Filtragem (19:31)
-cron.schedule("47 11 * * *", async () => {
-    log("Agendamento: Fim do período de checagem da tarde e filtragem.");
-    await endCheckPeriod();
-}, {
-    timezone: "America/Sao_Paulo" 
 });
 
 io.on("connection", async (socket) => {
@@ -356,14 +280,9 @@ io.on("connection", async (socket) => {
                 log(`Tentativa de adicionar nome duplicado: ${newName}`);
                 socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
             } else {
-                /// 2. Insere o novo nome (Substitui o INSERT INTO)
-		// NOVO: Adiciona o campo 'checked' para a lógica de presença da tarde
-		await sheet.addRow({ 
-		    name: newName, 
-		    timestamp: timestamp, 
-		    socket_id: socket.id, 
-		    checked: 'FALSE' // ⬅️ Inicializa como FALSO
-});
+                // 2. Insere o novo nome (Substitui o INSERT INTO)
+                await sheet.addRow({ name: newName, timestamp: timestamp, socket_id: socket.id });
+
                 log(`Nome adicionado: ${newName} (${period})`);
                 await fetchListsFromDb();
                 updateListsForAllClients();
@@ -373,12 +292,6 @@ io.on("connection", async (socket) => {
             socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
         }
     });
-
-// Evento para checar o nome (chamará a função checkName que você inseriu)
-socket.on("checkName", async ({ name }) => {
-    await checkName(socket.id, name);
-});
-
 // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#8) ----
     socket.on("removeName", async ({ name, period }) => {
         if (!canAddOrRemoveName(period)) {
@@ -447,8 +360,6 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
-
-
 
 
 
