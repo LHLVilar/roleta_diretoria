@@ -40,7 +40,7 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
 
   if ((hour >= 5 && hour < 9) || (hour === 9 && minute < 45)) {
     period = "morning";
-  } else if ((hour >= 12 && hour < 22) || (hour === 14 && minute < 45)) {
+  } else if ((hour >= 11 && hour < 22) || (hour === 14 && minute < 45)) {
     period = "afternoon";
   }
   
