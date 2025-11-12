@@ -239,7 +239,7 @@ async function startCheckPeriod() {
     }
     
     isCheckPeriodActive = true;
-    log("⏰ PERÍODO DE CHECAGEM INICIADO (11:10 - 11:30)");
+    log("⏰ PERÍODO DE CHECAGEM INICIADO (11:45 - 11:47)");
     updateListsForAllClients(); // Notifica clientes para mostrar a caixa de checagem
 }
 
@@ -312,7 +312,7 @@ cron.schedule("45 11 * * *", async () => {
 });
 
 // Agendamento da Abertura do Período de Checagem (19:00)
-cron.schedule("0 19 * * *", async () => {
+cron.schedule("45 11 * * *", async () => {
     log("Agendamento: Início do período de checagem da tarde.");
     await startCheckPeriod();
 }, {
@@ -320,7 +320,7 @@ cron.schedule("0 19 * * *", async () => {
 });
 
 // Agendamento do Fim do Período de Checagem e Filtragem (19:31)
-cron.schedule("31 19 * * *", async () => {
+cron.schedule("47 11 * * *", async () => {
     log("Agendamento: Fim do período de checagem da tarde e filtragem.");
     await endCheckPeriod();
 }, {
@@ -447,6 +447,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
 
 
