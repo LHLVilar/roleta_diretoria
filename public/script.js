@@ -7,7 +7,7 @@ const afternoonDrawEl = document.getElementById("afternoonDraw");
 const errorBox = document.getElementById("errorBox");
 const relogioEl = document.getElementById("relogio");
 
-// Variável para armazenar o ID do socket do cliente atual
+// Variável para armazenar o ID do socket do cliente atual.
 let mySocketId = null;
 
 // O servidor deve emitir seu ID após a conexão
