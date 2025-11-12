@@ -125,9 +125,8 @@ socket.on("updateLists", ({ morningList, afternoonList, morningDraw, afternoonDr
     	if (rules) {
         document.getElementById('rules').textContent = rules;
     }
-});
 
-    morningDrawEl.innerHTML = morningDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
+	morningDrawEl.innerHTML = morningDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
     afternoonDrawEl.innerHTML = afternoonDraw.map((n, i) => `<li>${i + 1}º ${n.name}</li>`).join("");
     errorBox.textContent = "";
 
