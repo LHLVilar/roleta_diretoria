@@ -299,7 +299,7 @@ cron.schedule("45 14 * * *", async () => {
 });
 
 // 11:00 — abre janela para marcar checklist
-cron.schedule("07 11 * * *", async () => {   // horário alterado para teste
+cron.schedule("15 11 * * *", async () => {   // horário alterado para teste
     selectionWindowOpen = true;            // habilita checkboxes
     log("Janela de seleção da tarde ABERTA (11:00).");
     updateListsForAllClients();            // atualiza front
@@ -308,11 +308,10 @@ cron.schedule("07 11 * * *", async () => {   // horário alterado para teste
 });
 
 // 11:03 — cruza nomes não marcados
-cron.schedule("09 11 * * *", async () => {  // horário alterado para teste
+cron.schedule("17 11 * * *", async () => {  // horário alterado para teste
     if (!selectionWindowOpen) return;      // evita executar fora de hora
     selectionWindowOpen = false;           // fecha janela
-    log("Processando nomes NÃO marcados (11:03).");
-
+    
     afternoonDraw.forEach(name => {
         if (!afternoonSelections[name]) {
             afternoonCrossed[name] = true; // risca nome
@@ -502,6 +501,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
 
 
