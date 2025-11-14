@@ -12,8 +12,8 @@ let mySocketId = null;
 
 // O servidor deve emitir seu ID após a conexão
 socket.on('connect', () => {
-    mySocketId = socket.id;
-    console.log("Conectado com ID:", mySocketId);
+  mySocketId = socket.id;
+  console.log("Conectado com ID:", mySocketId);
 });
 
 function atualizarRelogio() {
@@ -43,7 +43,7 @@ document.getElementById("btnAdicionar").addEventListener("click", () => {
   } else if ((hour >= 12 && hour < 22) || (hour === 14 && minute < 45)) {
     period = "afternoon";
   }
-  
+
   if (period) {
     socket.emit("addName", { name, period });
     nameInput.value = "";
@@ -81,38 +81,37 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
 });
 
 socket.on("updateLists", (data) => {
-
   // armazenar dados recebidos para uso posterior no front
-  window.afternoonSelections = data.afternoonSelections || {};    // nova linha
-  window.afternoonCrossed = data.afternoonCrossed || {};          // nova linha
-  window.selectionWindowOpen = data.selectionWindowOpen || false; // nova linha
-  window.selectionDisplayTime = data.selectionDisplayTime || "19h"; // nova linha
-  
+  window.afternoonSelections = data.afternoonSelections || {};
+  window.afternoonCrossed = data.afternoonCrossed || {};
+  window.selectionWindowOpen = data.selectionWindowOpen || false;
+  window.selectionDisplayTime = data.selectionDisplayTime || "19h";
+
   // BLOCO DE RENDERIZAÇÃO DA LISTA DA MANHÃ
-morningListEl.innerHTML = data.morningList.map((n) => `
+  morningListEl.innerHTML = data.morningList.map((n) => `
     <li class="list-group-item">
       <span>${n.name}</span>
       <span class="horario">${n.timestamp}</span>
       ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
     </li>
-`).join("");
+  `).join("");
 
- // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
-afternoonListEl.innerHTML = data.afternoonList.map((n) => `
+  // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
+  afternoonListEl.innerHTML = data.afternoonList.map((n) => `
     <li class="list-group-item">
       <span>${n.name}</span>
       <span class="horario">${n.timestamp}</span>
       ${n.socketId === mySocketId ? `<button class="btn btn-sm btn-danger btn-excluir" data-nome="${n.name}">X</button>` : ''}
     </li>
-`).join("");
+  `).join("");
 
-// DRAW MANHÃ (igual)
-morningDrawEl.innerHTML = data.morningDraw
-  .map((n, i) => `<li>${i + 1}º ${n}</li>`)
-  .join("");
+  // DRAW MANHÃ (igual)
+  morningDrawEl.innerHTML = data.morningDraw
+    .map((n, i) => `<li>${i + 1}º ${n}</li>`)
+    .join("");
 
-// DRAW TARDE — ALTERADO
-afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `
+  // DRAW TARDE — render com checkbox, horario e riscado
+  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `
     <li class="list-group-item d-flex align-items-center justify-content-between">
       <div>
         <span>${i + 1}º</span>
@@ -134,23 +133,23 @@ afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `
         </label>
       </div>
     </li>
-`).join("");
+  `).join("");
 
-errorBox.textContent = "";
+  errorBox.textContent = "";
 });
 
-// listener: envia seleção quando checkbox muda
+// listener: envia seleção quando checkbox muda (FRONT)
 afternoonDrawEl.addEventListener("change", (e) => {
-  if (e.target.classList.contains("afternoon-checkbox")) {
-    const name = e.target.dataset.name;
-    const selected = e.target.checked;
-    socket.emit("selectAfternoonName", { name, selected });
-  }
+  if (!e.target.classList.contains("afternoon-checkbox")) return;
+  const nameRaw = e.target.dataset.name;
+  const name = (nameRaw || "").toString().trim();
+  const selected = !!e.target.checked;
+  socket.emit("selectAfternoonName", { name, selected });
 });
 
 socket.on("errorMessage", (message) => {
   errorBox.textContent = message;
   setTimeout(() => {
-      errorBox.textContent = "";
+    errorBox.textContent = "";
   }, 5000);
 });
