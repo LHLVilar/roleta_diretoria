@@ -298,30 +298,49 @@ cron.schedule("45 14 * * *", async () => {
   timezone: "America/Sao_Paulo"
 });
 
-// 11:00 — abre janela para marcar checklist
-cron.schedule("15 11 * * *", async () => {   // horário alterado para teste
-    selectionWindowOpen = true;            // habilita checkboxes
-    log("Janela de seleção da tarde ABERTA (11:00).");
-    updateListsForAllClients();            // atualiza front
-}, {
-    timezone: "America/Sao_Paulo"
-});
-
-// 11:03 — cruza nomes não marcados
-cron.schedule("17 11 * * *", async () => {  // horário alterado para teste
-    if (!selectionWindowOpen) return;      // evita executar fora de hora
-    selectionWindowOpen = false;           // fecha janela
-    
+cron.schedule("35 11 * * *", async () => {
+    selectionWindowOpen = true; 
+    // garante que todas as chaves existam na memória
     afternoonDraw.forEach(name => {
-        if (!afternoonSelections[name]) {
-            afternoonCrossed[name] = true; // risca nome
-        }
+        if (!(name in afternoonSelections)) afternoonSelections[name] = false;
     });
+    log("Janela de seleção da tarde ABERTA (11:33).");
+    updateListsForAllClients();
+}, { timezone: "America/Sao_Paulo" });
 
-    updateListsForAllClients();            // envia atualização
-}, {
-    timezone: "America/Sao_Paulo"
-});
+cron.schedule("36 11 * * *", async () => {
+    if (!selectionWindowOpen) return;
+    selectionWindowOpen = false;
+    log("Processando nomes NÃO marcados (11:35).");
+
+    try {
+        const sheet = getSheetByTitle("afternoon_draw");
+        const rows = await sheet.getRows();
+
+        for (const name of afternoonDraw) {
+            const normalized = name.trim().toLowerCase();
+            const selected = Object.keys(afternoonSelections).some(k => k.trim().toLowerCase() === normalized && afternoonSelections[k]);
+            if (!selected) {
+                afternoonCrossed[name] = true;
+
+                const row = rows.find(r => (r.get('name')||"").trim().toLowerCase() === normalized);
+
+                if (row) {
+                    row.crossed = 'TRUE';
+                    await row.save();
+                    log(`Persistido crossed=TRUE para "${name}"`);
+                } else {
+                    await sheet.addRow({ name: name, crossed: 'TRUE' });
+                    log(`Linha criada no sheet para "${name}" com crossed=TRUE`);
+                }
+            }
+        }
+
+        updateListsForAllClients();
+    } catch (err) {
+        log("Erro ao processar nomes não marcados: " + err.message);
+    }
+}, { timezone: "America/Sao_Paulo" });
 
 io.on("connection", async (socket) => {
   log(`Novo usuário conectado com ID: ${socket.id}`);
@@ -501,15 +520,4 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
-
-
-
-
-
-
-
-
-
-
-
 
