@@ -81,6 +81,13 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
 });
 
 socket.on("updateLists", (data) => {
+
+  // armazenar dados recebidos para uso posterior no front
+  window.afternoonSelections = data.afternoonSelections || {};    // nova linha
+  window.afternoonCrossed = data.afternoonCrossed || {};          // nova linha
+  window.selectionWindowOpen = data.selectionWindowOpen || false; // nova linha
+  window.selectionDisplayTime = data.selectionDisplayTime || "19h"; // nova linha
+  
   // BLOCO DE RENDERIZAÇÃO DA LISTA DA MANHÃ
 morningListEl.innerHTML = data.morningList.map((n) => `
     <li class="list-group-item">
@@ -90,7 +97,7 @@ morningListEl.innerHTML = data.morningList.map((n) => `
     </li>
 `).join("");
 
-  // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
+ // BLOCO DE RENDERIZAÇÃO DA LISTA DA TARDE
 afternoonListEl.innerHTML = data.afternoonList.map((n) => `
     <li class="list-group-item">
       <span>${n.name}</span>
@@ -99,9 +106,46 @@ afternoonListEl.innerHTML = data.afternoonList.map((n) => `
     </li>
 `).join("");
 
-  morningDrawEl.innerHTML = data.morningDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
-  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `<li>${i + 1}º ${n}</li>`).join("");
-  errorBox.textContent = "";
+// DRAW MANHÃ (igual)
+morningDrawEl.innerHTML = data.morningDraw
+  .map((n, i) => `<li>${i + 1}º ${n}</li>`)
+  .join("");
+
+// DRAW TARDE — ALTERADO
+afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `
+    <li class="list-group-item d-flex align-items-center justify-content-between">
+      <div>
+        <span>${i + 1}º</span>
+        <span class="ml-2" ${window.afternoonCrossed && window.afternoonCrossed[n] ? 'style="text-decoration: line-through;"' : ''}>${n}</span>
+      </div>
+
+      <div class="d-flex align-items-center">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;">
+          <input
+            type="checkbox"
+            class="afternoon-checkbox"
+            data-name="${n}"
+            ${window.afternoonSelections && window.afternoonSelections[n] ? 'checked' : ''}
+            ${window.selectionWindowOpen ? '' : 'disabled'}
+          />
+          <span style="font-family:Roboto, sans-serif;font-weight:700;">
+            ${window.selectionDisplayTime || '19h'}
+          </span>
+        </label>
+      </div>
+    </li>
+`).join("");
+
+errorBox.textContent = "";
+});
+
+// listener: envia seleção quando checkbox muda
+afternoonDrawEl.addEventListener("change", (e) => {
+  if (e.target.classList.contains("afternoon-checkbox")) {
+    const name = e.target.dataset.name;
+    const selected = e.target.checked;
+    socket.emit("selectAfternoonName", { name, selected });
+  }
 });
 
 socket.on("errorMessage", (message) => {
