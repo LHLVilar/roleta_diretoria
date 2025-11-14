@@ -298,7 +298,7 @@ cron.schedule("45 14 * * *", async () => {
   timezone: "America/Sao_Paulo"
 });
 // ABRE CHECK BOX DAS 19H
-cron.schedule("19 15 * * *", async () => {
+cron.schedule("22 15 * * *", async () => {
     selectionWindowOpen = true; 
     // garante que todas as chaves existam na memória
     afternoonDraw.forEach(name => {
@@ -307,7 +307,7 @@ cron.schedule("19 15 * * *", async () => {
     updateListsForAllClients();
 }, { timezone: "America/Sao_Paulo" });
 // FECHA CHECK BOX DAS 19H
-cron.schedule("20 15 * * *", async () => {
+cron.schedule("23 15 * * *", async () => {
     if (!selectionWindowOpen) return;
     selectionWindowOpen = false;
     
@@ -521,4 +521,5 @@ server.listen(PORT, '0.0.0.0', () => { 
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
