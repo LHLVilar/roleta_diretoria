@@ -297,22 +297,20 @@ cron.schedule("45 14 * * *", async () => {
 }, {
   timezone: "America/Sao_Paulo"
 });
-
-cron.schedule("35 11 * * *", async () => {
+// ABRE CHECK BOX DAS 19H
+cron.schedule("55 14 * * *", async () => {
     selectionWindowOpen = true; 
     // garante que todas as chaves existam na memória
     afternoonDraw.forEach(name => {
         if (!(name in afternoonSelections)) afternoonSelections[name] = false;
     });
-    log("Janela de seleção da tarde ABERTA (11:33).");
     updateListsForAllClients();
 }, { timezone: "America/Sao_Paulo" });
-
-cron.schedule("36 11 * * *", async () => {
+// FECHA CHECK BOX DAS 19H
+cron.schedule("57 14 * * *", async () => {
     if (!selectionWindowOpen) return;
     selectionWindowOpen = false;
-    log("Processando nomes NÃO marcados (11:35).");
-
+    
     try {
         const sheet = getSheetByTitle("afternoon_draw");
         const rows = await sheet.getRows();
@@ -520,4 +518,5 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
 
