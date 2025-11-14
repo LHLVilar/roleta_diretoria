@@ -80,6 +80,59 @@ document.getElementById("afternoonList").addEventListener("click", (e) => {
   }
 });
 
+// RENDERIZAÇÃO E MANUTENÇÃO DE ESTADO
+function renderAfternoonDraw(data) {
+  afternoonDrawEl.innerHTML = '';
+  data.afternoonDraw.forEach((n, i) => {
+    const isChecked = window.afternoonSelections[n] || false;
+    const isCrossed = window.afternoonCrossed[n] || false;
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex align-items-center justify-content-between';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${i + 1}º ${n}`;
+    if (isCrossed) nameSpan.style.textDecoration = 'line-through';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'afternoon-checkbox';
+    checkbox.dataset.name = n;
+    checkbox.checked = isChecked;
+    checkbox.disabled = !window.selectionWindowOpen;
+
+    checkbox.addEventListener('change', () => {
+      window.afternoonSelections[n] = checkbox.checked;
+      socket.emit("selectAfternoonName", { name: n, selected: checkbox.checked });
+    });
+
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '6px';
+    label.style.margin = '0';
+    label.appendChild(checkbox);
+
+    const timeSpan = document.createElement('span');
+    timeSpan.style.fontFamily = 'Roboto, sans-serif';
+    timeSpan.style.fontWeight = '700';
+    timeSpan.textContent = window.selectionDisplayTime || '19h';
+    label.appendChild(timeSpan);
+
+    const leftDiv = document.createElement('div');
+    leftDiv.appendChild(nameSpan);
+
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'd-flex align-items-center';
+    rightDiv.appendChild(label);
+
+    li.appendChild(leftDiv);
+    li.appendChild(rightDiv);
+
+    afternoonDrawEl.appendChild(li);
+  });
+}
+
 socket.on("updateLists", (data) => {
   // armazenar dados recebidos para uso posterior no front
   window.afternoonSelections = data.afternoonSelections || {};
@@ -105,47 +158,18 @@ socket.on("updateLists", (data) => {
     </li>
   `).join("");
 
-  // DRAW MANHÃ (igual)
+  // DRAW MANHÃ
   morningDrawEl.innerHTML = data.morningDraw
     .map((n, i) => `<li>${i + 1}º ${n}</li>`)
     .join("");
 
-  // DRAW TARDE — render com checkbox, horario e riscado
-  afternoonDrawEl.innerHTML = data.afternoonDraw.map((n, i) => `
-    <li class="list-group-item d-flex align-items-center justify-content-between">
-      <div>
-        <span>${i + 1}º</span>
-        <span class="ml-2" ${window.afternoonCrossed && window.afternoonCrossed[n] ? 'style="text-decoration: line-through;"' : ''}>${n}</span>
-      </div>
-
-      <div class="d-flex align-items-center">
-        <label style="display:flex;align-items:center;gap:6px;margin:0;">
-          <input
-            type="checkbox"
-            class="afternoon-checkbox"
-            data-name="${n}"
-            ${window.afternoonSelections && window.afternoonSelections[n] ? 'checked' : ''}
-            ${window.selectionWindowOpen ? '' : 'disabled'}
-          />
-          <span style="font-family:Roboto, sans-serif;font-weight:700;">
-            ${window.selectionDisplayTime || '19h'}
-          </span>
-        </label>
-      </div>
-    </li>
-  `).join("");
+  // DRAW TARDE — USANDO FUNÇÃO DE RENDERIZACAO
+  renderAfternoonDraw(data);
 
   errorBox.textContent = "";
 });
 
-// listener: envia seleção quando checkbox muda (FRONT)
-afternoonDrawEl.addEventListener("change", (e) => {
-  if (!e.target.classList.contains("afternoon-checkbox")) return;
-  const nameRaw = e.target.dataset.name;
-  const name = (nameRaw || "").toString().trim();
-  const selected = !!e.target.checked;
-  socket.emit("selectAfternoonName", { name, selected });
-});
+// listener: envia seleção quando checkbox muda (FRONT) — removido pois agora cada checkbox tem seu próprio listener
 
 socket.on("errorMessage", (message) => {
   errorBox.textContent = message;
