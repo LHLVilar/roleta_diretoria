@@ -117,50 +117,69 @@ function updateListsForAllClients() {
 }
 // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS ----
 async function fetchListsFromDb() {
-    try {
-        // As abas Morning List e Afternoon List devem ter as colunas: name, timestamp, socket_id
-        const morningSheet = getSheetByTitle('morning_list');
-        const afternoonSheet = getSheetByTitle('afternoon_list');
-        
-        // As abas Morning Draw e Afternoon Draw devem ter a coluna: name
-        const morningDrawSheet = getSheetByTitle('morning_draw');
-        const afternoonDrawSheet = getSheetByTitle('afternoon_draw');
+  try {
+    // As abas Morning List e Afternoon List devem ter as colunas: name, timestamp, socket_id
+    const morningSheet = getSheetByTitle('morning_list');
+    const afternoonSheet = getSheetByTitle('afternoon_list');
+    
+    // As abas Morning Draw e Afternoon Draw devem ter a coluna: name
+    const morningDrawSheet = getSheetByTitle('morning_draw');
+    const afternoonDrawSheet = getSheetByTitle('afternoon_draw');
 
-        // Busca e mapeia a lista da manhã
-        const morningRows = await morningSheet.getRows();
-        morningList = morningRows.map(row => ({
-            name: row.get('name'),
-            timestamp: row.get('timestamp'),
-            socketId: row.get('socket_id') 
-        }));
+    // Busca e mapeia a lista da manhã
+    const morningRows = await morningSheet.getRows();
+    morningList = morningRows.map(row => ({
+      name: row.get('name'),
+      timestamp: row.get('timestamp'),
+      socketId: row.get('socket_id')
+    }));
 
-        // Busca e mapeia a lista da tarde
-        const afternoonRows = await afternoonSheet.getRows();
-        afternoonList = afternoonRows.map(row => ({
-            name: row.get('name'),
-            timestamp: row.get('timestamp'),
-            socketId: row.get('socket_id')
-        }));
+    // Busca e mapeia a lista da tarde
+    const afternoonRows = await afternoonSheet.getRows();
+    afternoonList = afternoonRows.map(row => ({
+      name: row.get('name'),
+      timestamp: row.get('timestamp'),
+      socketId: row.get('socket_id')
+    }));
 
-        // Busca e mapeia os resultados do sorteio da manhã
-        const morningDrawRows = await morningDrawSheet.getRows();
-        morningDraw = morningDrawRows.map(row => row.get('name'));
+    // Busca e mapeia os resultados do sorteio da manhã
+    const morningDrawRows = await morningDrawSheet.getRows();
+    morningDraw = morningDrawRows.map(row => row.get('name'));
 
-        // Busca e mapeia os resultados do sorteio da tarde
-        const afternoonDrawRows = await afternoonDrawSheet.getRows();
-        afternoonDraw = afternoonDrawRows.map(row => row.get('name'));
+    // Busca e mapeia os resultados do sorteio da tarde
+    const afternoonDrawRows = await afternoonDrawSheet.getRows();
+    afternoonDraw = afternoonDrawRows.map(row => row.get('name'));
 
-	// Recria objeto que marca nomes riscados às 18:30
-        afternoonCrossed = {}; // nova inicialização
-        afternoonDrawRows.forEach(row => {
-            const name = row.get('name');
-            const crossed = row.get('crossed') === "1"; // nova coluna opcional
-            if (crossed) afternoonCrossed[name] = true;
-        });
+    // --- popula mapas de selecionados e riscados a partir das colunas selected/crossed ---
+    afternoonSelections = {};
+    afternoonCrossed = {};
+    afternoonDrawRows.forEach(row => {
+      const name = (row.get('name') || "").toString().trim();
 
-    } catch (err) {
-        log("Erro ao buscar listas do Google Sheets: " + err.message);
-    }
+      const selRaw = row.get('selected');
+      const crossedRaw = row.get('crossed');
+
+      const selected = selRaw !== undefined && (
+        selRaw === true ||
+        selRaw.toString().toUpperCase() === 'TRUE' ||
+        selRaw.toString() === '1'
+      );
+
+      const crossed = crossedRaw !== undefined && (
+        crossedRaw === true ||
+        crossedRaw.toString().toUpperCase() === 'TRUE' ||
+        crossedRaw.toString() === '1'
+      );
+
+      if (name) {
+        afternoonSelections[name] = !!selected;
+        afternoonCrossed[name] = !!crossed;
+      }
+    });
+
+  } catch (err) {
+    log("Erro ao buscar listas do Google Sheets: " + err.message);
+  }
 }
 
 // Função para verificar e resetar as listas se for um novo dia
@@ -280,7 +299,7 @@ cron.schedule("45 14 * * *", async () => {
 });
 
 // 11:00 — abre janela para marcar checklist
-cron.schedule("20 10 * * *", async () => {   // horário alterado para teste
+cron.schedule("07 11 * * *", async () => {   // horário alterado para teste
     selectionWindowOpen = true;            // habilita checkboxes
     log("Janela de seleção da tarde ABERTA (11:00).");
     updateListsForAllClients();            // atualiza front
@@ -289,7 +308,7 @@ cron.schedule("20 10 * * *", async () => {   // horário alterado para teste
 });
 
 // 11:03 — cruza nomes não marcados
-cron.schedule("23 10 * * *", async () => {  // horário alterado para teste
+cron.schedule("09 11 * * *", async () => {  // horário alterado para teste
     if (!selectionWindowOpen) return;      // evita executar fora de hora
     selectionWindowOpen = false;           // fecha janela
     log("Processando nomes NÃO marcados (11:03).");
@@ -346,6 +365,75 @@ io.on("connection", async (socket) => {
             socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
         }
     });
+// ---- ITEM 2: listener para marcar checkbox da tarde ----
+socket.on("selectAfternoonName", async ({ name, selected }) => {
+  try {
+    const normalized = (name || "").toString().trim().toLowerCase();
+
+    // atualiza memória imediata
+    afternoonSelections[name] = !!selected;
+    log(`selectAfternoonName recebido: "${name}" => ${selected}`);
+
+    // persiste no Google Sheets
+    const afternoonDrawSheet = getSheetByTitle("afternoon_draw");
+    const rows = await afternoonDrawSheet.getRows();
+
+    // busca correspondência insensível a maiúsculas/minúsculas e espaços
+    const rowToUpdate = rows.find(r => ((r.get('name')||"").toString().trim().toLowerCase() === normalized));
+
+    if (rowToUpdate) {
+      rowToUpdate.selected = selected ? 'TRUE' : 'FALSE';
+      await rowToUpdate.save();
+      log(`Persistido selected=${rowToUpdate.selected} para "${rowToUpdate.get('name')}"`);
+    } else {
+      // se não encontrar, adiciona nova linha com selected
+      await afternoonDrawSheet.addRow({ name: name, selected: selected ? 'TRUE' : 'FALSE' });
+      log(`Linha criada no sheet para "${name}" com selected=${selected}`);
+    }
+
+    // recarrega e notifica clientes
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  } catch (err) {
+    log("Erro selectAfternoonName: " + err.message);
+    socket.emit("errorMessage", "Erro ao marcar seleção. Tente novamente.");
+  }
+});
+
+// ---- ITEM 3: marcar manualmente nomes como riscados (crossed) ----
+socket.on("crossAfternoonName", async ({ name, crossed }) => {
+  try {
+    const normalized = (name || "").toString().trim().toLowerCase();
+
+    // atualiza memória imediata
+    afternoonCrossed[name] = !!crossed;
+    log(`crossAfternoonName recebido: "${name}" => ${crossed}`);
+
+    // persiste no Google Sheets
+    const afternoonDrawSheet = getSheetByTitle("afternoon_draw");
+    const rows = await afternoonDrawSheet.getRows();
+
+    // busca correspondência insensível a maiúsculas/minúsculas e espaços
+    const rowToUpdate = rows.find(r => ((r.get('name')||"").toString().trim().toLowerCase() === normalized));
+
+    if (rowToUpdate) {
+      rowToUpdate.crossed = crossed ? 'TRUE' : 'FALSE';
+      await rowToUpdate.save();
+      log(`Persistido crossed=${rowToUpdate.crossed} para "${rowToUpdate.get('name')}"`);
+    } else {
+      // se não encontrar, adiciona nova linha com crossed
+      await afternoonDrawSheet.addRow({ name: name, crossed: crossed ? 'TRUE' : 'FALSE' });
+      log(`Linha criada no sheet para "${name}" com crossed=${crossed}`);
+    }
+
+    // recarrega e notifica clientes
+    await fetchListsFromDb();
+    updateListsForAllClients();
+  } catch (err) {
+    log("Erro crossAfternoonName: " + err.message);
+    socket.emit("errorMessage", "Erro ao marcar cruzado. Tente novamente.");
+  }
+});
 // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#8) ----
     socket.on("removeName", async ({ name, period }) => {
         if (!canAddOrRemoveName(period)) {
