@@ -50,6 +50,12 @@ let afternoonDraw = [];
 
 const lastDrawDate = { morning: null, afternoon: null };
 
+let afternoonSelections = {};      // já existia no seu — se não tiver, adicionar
+let selectionWindowOpen = false;   // já existia no seu — se não tiver, adicionar
+
+let afternoonCrossed = {};         // nova variável
+let selectionDisplayTime = "19h";  // nova variável
+
 const rules = `
 Regras:
 - Manhã: adicionar nomes de 05:00 a 09:44:59. Sorteio às 09:45.
@@ -102,6 +108,11 @@ function updateListsForAllClients() {
     morningDraw,
     afternoonDraw,
     rules,
+
+    afternoonSelections,   // envia marcações da tarde
+    afternoonCrossed,      // envia nomes riscados
+    selectionWindowOpen,   // envia status da janela
+    selectionDisplayTime   // envia "19h"
   });
 }
 // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS ----
@@ -138,6 +149,14 @@ async function fetchListsFromDb() {
         // Busca e mapeia os resultados do sorteio da tarde
         const afternoonDrawRows = await afternoonDrawSheet.getRows();
         afternoonDraw = afternoonDrawRows.map(row => row.get('name'));
+
+	// Recria objeto que marca nomes riscados às 18:30
+        afternoonCrossed = {}; // nova inicialização
+        afternoonDrawRows.forEach(row => {
+            const name = row.get('name');
+            const crossed = row.get('crossed') === "1"; // nova coluna opcional
+            if (crossed) afternoonCrossed[name] = true;
+        });
 
     } catch (err) {
         log("Erro ao buscar listas do Google Sheets: " + err.message);
@@ -200,6 +219,15 @@ async function runDraw(period) {
     } else if (period === "afternoon") {
         listToDraw = afternoonList.map(n => n.name);
         drawSheet = getSheetByTitle("afternoon_draw");
+
+	afternoonSelections = {};   // zera marcações anteriores
+        afternoonCrossed = {};      // zera nomes riscados
+
+        // embaralha lista e escolhe vencedores
+        const shuffled = [...listToDraw].sort(() => Math.random() - 0.5); // nova linha
+        afternoonDraw = shuffled.slice(0, 5);   // nova linha: define sorteados
+    
+	updateListsForAllClients();   // atualiza front após sorteio
     } else {
         return;
     }
@@ -249,6 +277,32 @@ cron.schedule("45 14 * * *", async () => {
   }
 }, {
   timezone: "America/Sao_Paulo"
+});
+
+// 11:00 — abre janela para marcar checklist
+cron.schedule("20 10 * * *", async () => {   // horário alterado para teste
+    selectionWindowOpen = true;            // habilita checkboxes
+    log("Janela de seleção da tarde ABERTA (11:00).");
+    updateListsForAllClients();            // atualiza front
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
+// 11:03 — cruza nomes não marcados
+cron.schedule("23 10 * * *", async () => {  // horário alterado para teste
+    if (!selectionWindowOpen) return;      // evita executar fora de hora
+    selectionWindowOpen = false;           // fecha janela
+    log("Processando nomes NÃO marcados (11:03).");
+
+    afternoonDraw.forEach(name => {
+        if (!afternoonSelections[name]) {
+            afternoonCrossed[name] = true; // risca nome
+        }
+    });
+
+    updateListsForAllClients();            // envia atualização
+}, {
+    timezone: "America/Sao_Paulo"
 });
 
 io.on("connection", async (socket) => {
@@ -360,3 +414,14 @@ server.listen(PORT, '0.0.0.0', () => {
     // Chamamos a função assíncrona AQUI.
     initializeSheets();
 });
+
+
+
+
+
+
+
+
+
+
+
