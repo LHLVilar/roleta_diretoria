@@ -263,3 +263,277 @@ async function runDraw(period) {
         try {
             await drawSheet.addRow({ name: name });
         } catch (err) {
+            log(`Erro ao inserir nome no sorteio do Sheets: ${name} - ${err.message}`);
+        }
+    }
+
+    await fetchListsFromDb();
+    updateListsForAllClients();
+}
+// Sorteio da manhã - 09:45
+cron.schedule("45 9 * * *", async () => {
+  const now = getSaoPauloTime();
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+  if (lastDrawDate.morning !== todayKey) {
+    lastDrawDate.morning = todayKey;
+    log("Sorteio automático da manhã.");
+    await runDraw("morning");
+  }
+}, {
+  timezone: "America/Sao_Paulo"
+});
+
+// Sorteio da tarde - 14:45
+cron.schedule("45 14 * * *", async () => {
+  const now = getSaoPauloTime();
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+  if (lastDrawDate.afternoon !== todayKey) {
+    lastDrawDate.afternoon = todayKey;
+    log("Sorteio automático da tarde.");
+    await runDraw("afternoon");
+  }
+}, {
+  timezone: "America/Sao_Paulo"
+});
+// ABRE CHECK BOX DAS 19H
+cron.schedule("34 15 * * *", async () => {
+    selectionWindowOpen = true; 
+    // garante que todas as chaves existam na memória
+    afternoonDraw.forEach(name => {
+        if (!(name in afternoonSelections)) afternoonSelections[name] = false;
+    });
+    updateListsForAllClients();
+}, { timezone: "America/Sao_Paulo" });
+// FECHA CHECK BOX DAS 19H
+cron.schedule("35 15 * * *", async () => {
+    if (!selectionWindowOpen) return;
+    selectionWindowOpen = false;
+    
+    try {
+        const sheet = getSheetByTitle("afternoon_draw");
+        const rows = await sheet.getRows();
+
+        for (const name of afternoonDraw) {
+            const normalized = name.trim().toLowerCase();
+            const selected = Object.keys(afternoonSelections).some(k => k.trim().toLowerCase() === normalized && afternoonSelections[k]);
+            if (!selected) {
+                afternoonCrossed[name] = true;
+
+                const row = rows.find(r => (r.get('name')||"").trim().toLowerCase() === normalized);
+
+                if (row) {
+                    row.crossed = 'TRUE';
+                    await row.save();
+                    log(`Persistido crossed=TRUE para "${name}"`);
+                } else {
+                    await sheet.addRow({ name: name, crossed: 'TRUE' });
+                    log(`Linha criada no sheet para "${name}" com crossed=TRUE`);
+                }
+            }
+        }
+
+        updateListsForAllClients();
+    } catch (err) {
+        log("Erro ao processar nomes não marcados: " + err.message);
+    }
+}, { timezone: "America/Sao_Paulo" });
+
+io.on("connection", async (socket) => {
+  log(`Novo usuário conectado com ID: ${socket.id}`);
+  await fetchListsFromDb();
+  updateListsForAllClients();
+    
+    // ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#7) ----
+    socket.on("addName", async ({ name, period }) => {
+        if (!canAddOrRemoveName(period)) {
+            socket.emit("errorMessage", `Não é possível adicionar nomes fora dos horários permitidos.`);
+            log(`Tentativa de adicionar fora do horário: ${name} (${period})`);
+            return;
+        }
+
+        const newName = name.trim();
+        const timestamp = getSaoPauloTime().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const sheetTitle = period === "morning" ? "morning_list" : "afternoon_list";
+
+        try {
+            const sheet = getSheetByTitle(sheetTitle);
+
+            // 1. Verifica se o nome já existe no Sheets (Substitui o ON CONFLICT do SQL)
+            // É necessário carregar todas as linhas e verificar manualmente.
+            const rows = await sheet.getRows();
+            const isDuplicate = rows.some(row => row.get('name').toLowerCase() === newName.toLowerCase());
+
+            if (isDuplicate) {
+                log(`Tentativa de adicionar nome duplicado: ${newName}`);
+                socket.emit("errorMessage", `O nome "${newName}" já está na lista.`);
+            } else {
+                // 2. Insere o novo nome (Substitui o INSERT INTO)
+                await sheet.addRow({ name: newName, timestamp: timestamp, socket_id: socket.id });
+
+                log(`Nome adicionado: ${newName} (${period})`);
+                await fetchListsFromDb();
+                updateListsForAllClients();
+            }
+        } catch (err) {
+            log("Erro ao adicionar nome no Sheets: " + err.message);
+            socket.emit("errorMessage", "Erro ao adicionar nome. Tente novamente.");
+        }
+    });
+// ---- ITEM 2: listener para marcar checkbox da tarde ----
+socket.on("selectAfternoonName", async ({ name, selected }) => {
+  try {
+    const normalized = (name || "").toString().trim().toLowerCase();
+
+    // ATUALIZAÇÃO IMEDIATA DO ESTADO EM MEMÓRIA
+    afternoonSelections[name] = !!selected;
+    log(`selectAfternoonName recebido: "${name}" => ${selected}`);
+    
+    // NOTIFICA CLIENTES IMEDIATAMENTE COM O ESTADO ATUALIZADO (ISSO ELIMINA O PISCA-PISCA)
+    updateListsForAllClients();
+
+    // PERSISTÊNCIA NO GOOGLE SHEETS (Assíncrona/Lenta)
+    // Não usamos 'await' aqui para não bloquear a resposta rápida acima.
+    persistAfternoonSelection({ name, selected, normalized });
+
+  } catch (err) {
+    log("Erro selectAfternoonName: " + err.message);
+    socket.emit("errorMessage", "Erro ao marcar seleção. Tente novamente.");
+  }
+});
+
+// ---- ITEM 3: marcar manualmente nomes como riscados (crossed) ----
+socket.on("crossAfternoonName", async ({ name, crossed }) => {
+  try {
+    const normalized = (name || "").toString().trim().toLowerCase();
+
+    // ATUALIZAÇÃO IMEDIATA DO ESTADO EM MEMÓRIA
+    afternoonCrossed[name] = !!crossed;
+    log(`crossAfternoonName recebido: "${name}" => ${crossed}`);
+
+    // NOTIFICA CLIENTES IMEDIATAMENTE COM O ESTADO ATUALIZADO
+    updateListsForAllClients();
+
+    // PERSISTÊNCIA NO GOOGLE SHEETS (Assíncrona/Lenta)
+    // Não usamos 'await' aqui para não bloquear a resposta rápida acima.
+    persistAfternoonCrossed({ name, crossed, normalized });
+
+  } catch (err) {
+    log("Erro crossAfternoonName: " + err.message);
+    socket.emit("errorMessage", "Erro ao marcar cruzado. Tente novamente.");
+  }
+});
+// ---- FUNÇÃO ADAPTADA PARA GOOGLE SHEETS (#8) ----
+    socket.on("removeName", async ({ name, period }) => {
+        if (!canAddOrRemoveName(period)) {
+            socket.emit("errorMessage", `Não é possível remover nomes fora dos horários permitidos.`);
+            log(`Tentativa de remover fora do horário: ${name} (${period})`);
+            return;
+        }
+
+        const trimmedName = name.trim();
+        const sheetTitle = period === "morning" ? "morning_list" : "afternoon_list";
+
+        try {
+            const sheet = getSheetByTitle(sheetTitle);
+            const rows = await sheet.getRows();
+
+            // 1. Encontra a linha que corresponde ao nome E ao socket_id
+            const rowToDelete = rows.find(
+                row => row.get('name').toLowerCase() === trimmedName.toLowerCase() && row.get('socket_id') === socket.id
+            );
+
+            if (rowToDelete) {
+                // 2. Deleta a linha
+                await rowToDelete.delete();
+                log(`Nome removido: ${trimmedName} (${period})`);
+            } else {
+                log(`Tentativa de remover nome de outro usuário ou inexistente: ${trimmedName}`);
+                socket.emit("errorMessage", "Você só pode remover o seu próprio nome ou o nome não foi encontrado.");
+            }
+
+            await fetchListsFromDb();
+            updateListsForAllClients();
+        } catch (err) {
+            log("Erro ao remover nome do Sheets: " + err.message);
+            socket.emit("errorMessage", "Erro ao remover nome. Tente novamente.");
+        }
+    });
+
+    socket.on("manualDraw", async (period) => {
+        log(`Sorteio manual solicitado (${period})`);
+        await runDraw(period);
+    });
+});
+
+  // --- Funções de persistência assíncrona ---
+async function persistAfternoonSelection({ name, selected, normalized }) {
+    try {
+        const afternoonDrawSheet = getSheetByTitle("afternoon_draw");
+        // Chamada a getRows() é lenta, mas acontece fora do fluxo principal
+        const rows = await afternoonDrawSheet.getRows(); 
+
+        const rowToUpdate = rows.find(r => ((r.get('name')||"").toString().trim().toLowerCase() === normalized));
+        const persistenceValue = selected ? 'TRUE' : 'FALSE';
+
+        if (rowToUpdate) {
+          rowToUpdate.selected = persistenceValue;
+          await rowToUpdate.save();
+          log(`Persistido selected=${rowToUpdate.selected} para "${rowToUpdate.get('name')}"`);
+        } else {
+          await afternoonDrawSheet.addRow({ name: name, selected: persistenceValue });
+          log(`Linha criada no sheet para "${name}" com selected=${selected}`);
+        }
+    } catch(err) {
+        log("Erro na persistência assíncrona da Seleção no Sheets: " + err.message);
+    }
+}
+async function persistAfternoonCrossed({ name, crossed, normalized }) {
+    try {
+        const afternoonDrawSheet = getSheetByTitle("afternoon_draw");
+        // Chamada a getRows() é lenta, mas acontece fora do fluxo principal
+        const rows = await afternoonDrawSheet.getRows(); 
+
+        const rowToUpdate = rows.find(r => ((r.get('name')||"").toString().trim().toLowerCase() === normalized));
+        const persistenceValue = crossed ? 'TRUE' : 'FALSE';
+
+        if (rowToUpdate) {
+          rowToUpdate.crossed = persistenceValue;
+          await rowToUpdate.save();
+          log(`Persistido crossed=${rowToUpdate.crossed} para "${rowToUpdate.get('name')}"`);
+        } else {
+          await afternoonDrawSheet.addRow({ name: name, crossed: persistenceValue });
+          log(`Linha criada no sheet para "${name}" com crossed=${crossed}`);
+        }
+    } catch(err) {
+        log("Erro na persistência assíncrona do Riscado no Sheets: " + err.message);
+    }
+}
+
+
+  // --- Definição da nova função de inicialização ---
+async function initializeSheets() {
+    try {
+        await doc.loadInfo(); 
+        log("Conexão com Google Sheets estabelecida.");
+
+        // Chamadas de funções de inicialização:
+        await checkAndResetDaily();
+        await fetchListsFromDb();
+    } catch (err) {
+        log("Falha na conexão inicial com o Google Sheets. O servidor está rodando, mas o DB está inacessível: " + err.message);
+        log("⚠️ VERIFIQUE SUAS VARIÁVEIS DE AMBIENTE: GOOGLE_PRIVATE_KEY e GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    }
+}
+
+// --------------------------------------------------
+// O `server.listen` deve estar aqui (na raiz do arquivo)!
+// --------------------------------------------------
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => { 
+    log(`Servidor rodando na porta ${PORT}`);
+
+    // Chamamos a função assíncrona AQUI.
+    initializeSheets();
+});
