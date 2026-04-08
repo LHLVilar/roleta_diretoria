@@ -1,9 +1,6 @@
 {
   "name": "roleta_diretoria",
   "version": "1.0.0",
-  "engines": {
-  "node": "20.x"
-  },
   "description": "",
   "main": "server.js",
   "scripts": {
@@ -11,8 +8,8 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "google-auth-library": "9.14.2",
-    "google-spreadsheet": "4.1.1",
+    "google-auth-library": "^10.3.0",
+    "google-spreadsheet": "^5.0.2",
     "node-cron": "^4.2.1",
     "socket.io": "^4.7.5"
   },
