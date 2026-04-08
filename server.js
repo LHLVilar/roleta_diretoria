@@ -358,5 +358,5 @@ server.listen(PORT, '0.0.0.0', () => {
     log(`Servidor rodando na porta ${PORT}`);
 
     // Chamamos a função assíncrona AQUI.
-    initializeSheets();
+    // initializeSheets();
 });
