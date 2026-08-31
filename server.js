@@ -338,7 +338,9 @@ io.on("connection", async (socket) => {
   // --- Definição da nova função de inicialização ---
 async function initializeSheets() {
     try {
+        log("INICIANDO LOADINFO...");
         await doc.loadInfo(); 
+        log("LOADINFO CONCLUÍDO!");
         log("Conexão com Google Sheets estabelecida.");
 
         // Chamadas de funções de inicialização:
