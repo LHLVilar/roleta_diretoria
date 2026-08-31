@@ -347,8 +347,8 @@ async function initializeSheets() {
         await checkAndResetDaily();
         await fetchListsFromDb();
     } catch (err) {
-        log("Falha na conexão inicial com o Google Sheets. O servidor está rodando, mas o DB está inacessível: " + err.message);
-        log("⚠️ VERIFIQUE SUAS VARIÁVEIS DE AMBIENTE: GOOGLE_PRIVATE_KEY e GOOGLE_SERVICE_ACCOUNT_EMAIL");
+        log("ERRO NO LOADINFO: " + err.message);
+log(err.stack);
     }
 }
 
