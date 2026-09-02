@@ -338,17 +338,15 @@ io.on("connection", async (socket) => {
   // --- Definição da nova função de inicialização ---
 async function initializeSheets() {
     try {
-        log("INICIANDO LOADINFO...");
         await doc.loadInfo(); 
-        log("LOADINFO CONCLUÍDO!");
         log("Conexão com Google Sheets estabelecida.");
 
         // Chamadas de funções de inicialização:
         await checkAndResetDaily();
         await fetchListsFromDb();
     } catch (err) {
-        log("ERRO NO LOADINFO: " + err.message);
-log(err.stack);
+        log("Falha na conexão inicial com o Google Sheets. O servidor está rodando, mas o DB está inacessível: " + err.message);
+        log("⚠️ VERIFIQUE SUAS VARIÁVEIS DE AMBIENTE: GOOGLE_PRIVATE_KEY e GOOGLE_SERVICE_ACCOUNT_EMAIL");
     }
 }
 
